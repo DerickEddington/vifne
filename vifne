@@ -1,0 +1,53 @@
+#! /usr/bin/env scheme-script
+
+#!r6rs
+;; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+;; LICENSE from the original collection this file is distributed with.
+
+(import (rnrs base)
+        (rnrs programs)
+        (rnrs lists)
+        (vifne start)
+        (vifne config))
+
+(define (string-non-empty? x) (positive? (string-length x)))
+
+(define (exact-non-negative-integer? x) (and (integer? x) (exact? x) (not (negative? x))))
+
+(define (die msg . a) (apply error (car (command-line)) msg a))
+
+
+(define prog-args
+  (let loop ((c (cdr (command-line))) (o '()) (a '()))
+    (if (null? c)
+      (if (null? a) o (cons (cons 'rest (reverse a)) o))
+      (if (and (string-non-empty? (car c)) (char=? #\- (string-ref (car c) 0)))
+        (if (null? (cdr c))
+          (die "argument missing value" (car c))
+          (loop (cddr c) (cons (cons (car c) (cadr c)) o) a))
+        (loop (cdr c) o (cons (car c) a))))))
+
+(cond ((assoc 'rest prog-args) => (lambda (p) (apply die "extra arguments" (cdr p)))))
+
+
+(define (get-arg name valid? default . fs)
+  (cond ((assoc name prog-args) => (lambda (p)
+                                     (let ((v (fold-left (lambda (a f) (f a)) (cdr p) fs)))
+                                       (if (valid? v) v
+                                         (die "invalid argument value" name (cdr p))))))
+        (else (default))))
+
+(define-syntax arg
+  (syntax-rules ()
+    ((_ name (f ...) pred default)
+     (get-arg name pred (lambda () default) f ...))))
+
+
+(define storage-file       (arg "-f" () string-non-empty?
+                                default-storage-file))
+
+(define number-processors  (arg "-n" (string->number) exact-non-negative-integer?
+                                (number-host-processors)))
+
+
+(start-emulator storage-file number-processors)

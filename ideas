@@ -1,0 +1,387 @@
+To explore higher-level programming on Fresh Breeze, an emulator of Fresh Breeze
+could be made for Posix.  It doesn't need to accurately simulate the timings or
+low-level semantics, it only needs to accurately simulate the higher-level
+semantics I'm interested in building on.
+
+(Need to keep a log of issues encountered and reasoning of solutions and
+descriptions of alternatives - important for contributing my research to the
+community.  Starting with my initial questions about how to implement various
+parts.  Could invent an "issue identifier" system for tagging and tracking
+various issues, e.g. "I{4.2}" is second revision of "I{4}" which is defined as
+some approach to an issue.
+
+Make a list of the papers I had access to and those I didn't.)
+
+
+Ideas:
+
+? The core of the emulator is a symbolic interpreter for the Fresh Breeze
+  instruction set architecture.  This way assembly text files are directly
+  executable by the emulator/interpreter, which eliminates the effort/complexity
+  of byte-code, and makes for easier debugging.  FB programs must be stored in
+  the FB storage, so the ISA interpreter must get the instructions as chunks
+  from the FB storage, which has implications for the representation of a
+  high-level symbolic form, i.e. the external language run-time's representation
+  of its symbols, numbers, etc. might not be suitable to use in the FB storage
+  memory.  Maybe the machine code can be UTF-8 byte arrays of textual Scheme
+  datums?
+
+? Does it need to simulate the actual SMS's hierarchy and associative-directory,
+  or is it sufficient just to simulate global chunk IDs, orthogonal persistence,
+  write-once only / sealing, reference counting, and garbage collection?
+
+? To support orthogonal persistence, the Posix file-system must be used.  To
+  support persistence across Posix process instances, ...?  To support global
+  chunk IDs ...?
+
+? The per-processor Active Task List and/or the per-processor Pending Task Queue
+  and the global Deferred Task Queue (for pending tasks when there's no room in
+  the per-processor PTQs) all must be in the FB storage, to support resuming
+  (power-off power-on) the entire system.  No - the ATL and PTQ cannot be in the
+  emulator's FB storage, because that is not consistent with the semantics of
+  the real FB design.  However, the real design may still support resumption
+  because the processor state, excluding registers I guess, is in chunks which
+  can be stored in the SMS?  Need to learn more about the real design.
+
+x Maybe the persistent store will be implemented as a tree of Posix folders with
+  leaves being fixed-size files.  This simulates configurable depth of levels
+  (depth of folders) and configurable addition of new storage capacity.  But why
+  do I want to simulate that at this early phase?
+
+- Maybe the persistent store will be implemented as a single mmap'ed file of
+  fixed size.  Chunk IDs are simply offsets (scaled?) into the file.  (Maybe in
+  the future there could be a means, maybe an external utility, for resizing
+  this file.)  This seems to allow having the concurrency be simply
+  single-threaded Posix processes, one process per simulated Fresh Breeze
+  processor.  This allows using Ikarus to implement the emulator, using Ikarus's
+  FFI and raw memory facilities for mmap'ing and accessing the mmap'ed memory,
+  and thus many of the advantages of Scheme.
+
+- The foundation is the FB memory manager, because every other sub-system relies
+  on getting new free chunks.
+
+? Ideally, all FB system state will be stored in the FB storage, in such a way
+  that the system can be frozen/killed and then be restarted exactly where it
+  stopped.  Does the real design allow this?
+
+? A "Processing Chip" with multiple (16) Multi-Thread Processors (MTPs), and the
+  additional components (instruction and data access units and association
+  units) could be implemented as a Posix process that forks (or clones?) child
+  processes for each MTP.  TODO: How to share the data in the units across the
+  child processes?
+
+- I think a good design rule is: anything that would be implemented in hardware
+  for a real FB computer will be implemented by the hosting emulator program,
+  and anything that would be stored in the storage for a real FB computer will
+  be stored in the emulated storage mmap'ed file.
+
+- Futures must be implemented as "hardware", i.e. by the emulator.
+
+- "A chunk also includes auxiliary information that indicates the type and
+  format of its contents."
+
+- "The rules of operation of a Fresh Breeze system are such that the contents of
+  a chunk are never altered once the chunk has been stored in the SMS. (There is
+  one exception to this in the case of a guard chunk which is provided in
+  support of transactions processing ) "
+
+- "The SMS supports the operations of: obtaining unique identifiers for new
+  chunks; storing a chunk; accessing a chunk from its pointer; and incrementing
+  or decrementing the reference count of a chunk. The SMS automatically performs
+  incremental garbage collection of chunks when the reference count of any chunk
+  it holds becomes zero. Note that chunks are always moved between the SMS and
+  on-chip memory of the processing chips as complete units, just as cache lines
+  are stored and retrieved in conventional computers."
+
+? Should the various components, such as the SMS and the Chips, use some sort of
+  asynchronous message passing to emulate electrical busses.  E.g. the SMS
+  receives and implements the CreateGuard and GuardSwap instructions, as well as
+  fulfilling requests for storage access.
+
+? How to provide real concurrency ...?  Threads or processes?
+
+? How to implement the chunk memory manager ...?  Maybe as its own process
+  (forked from Ikarus) with pipes (passing textual Scheme datums?) for servicing
+  requests?
+
+? How to provide memory needed for system/hardware/emulator operations?
+  E.g. the local data segment of procedure activation.
+
+- "In a Fresh Breeze system, a stream is naturally represented by a sequence of
+  chunks, each chunk containing a group of stream elements. Either each such
+  chunk may include a reference to the chunk holding the next group of stream
+  elements, or auxiliary chunks containing “current” and “next” references may
+  be used to organize the chunks that hold stream elements."
+
+- "Computation in a Fresh Breeze system is carried out by method activations on
+  behalf of a system user. Computation in a method activation is performed by
+  exactly one thread of instruction execution. The thread has access to the code
+  segment of the method, a local data segment, and a set of registers that hold
+  intermediate results. The code segment is read-only and may be shared by many
+  threads for different method activations. The registers and local data segment
+  are private data of the thread and are only accessible to it. Note that in
+  this model of computation, a thread (method activation) can only access
+  information in the heap that it creates or that is given to it when it begins
+  execution."
+
+- "A master thread spawns a slave thread (executing a new function activation)
+  that performs an independent computation and terminates by joining with the
+  master thread."
+
+- "When the master spawns the slave thread, it initializes a join point and
+  provides the slave thread with a join ticket that permits it to exercise (use)
+  the join point. The join point is a special entry in the local data segment of
+  the master thread that has (1) space for a record of master thread status; and
+  (2) space for the result value that will be computed by the slave thread. The
+  join point includes a flag that indicates whether a value has been entered by
+  the slave thread, and a flag that indicates that a join ticket has been
+  issued." (I suppose these flags are in the space for master thread status,
+  because the result value space needs full 64 bits.)
+
+- "A join ticket is similar to the return address of a method, and is held at a
+  protected location in the local data segment of the slave method
+  activation. It consists of (1) the unique identifier (pointer) of the local
+  data segment of the master thread; and (2) the index of the join point within
+  the master thread local data segment."
+
+? How to implement suspending a thread/activation, when it tries to read a
+  non-ready join point, so that it can be reactivated when the other thread
+  makes the join point ready?  The activation state must be stored somewhere
+  that the other thread can access when it sets the join point.  Maybe the
+  pointer to the activation state can be stored in the slot for the join point
+  value, and the EnterJoinResult instruction done by the child thread gets
+  that pointer before it sets the value and then schedules the reactivation.
+  When the parent does ReadJoinValue, it checks the "value set" flag, if set it
+  just returns the value, if not set it stores the current activation state in
+  the slot.  The slot needs to be null if the parent has not done ReadJoinValue,
+  so EnterJoinResult can know whether the parent needs to be reactivated.
+
+? How to implement EnterJoinResult when the child is executing on a different
+  processor?  What concurrency issues, e.g. maybe a race, need to be dealt with?
+  Only two threads are involved: the parent and the child.  The parent and child
+  might concurrently access the join point, and because there is multiple pieces
+  of state (at least the "value set" flag and the value slot, maybe also the
+  parent activation state pointer trying to also be in the value slot), there is
+  a possible problem of inconsistency.  Maybe mutual exclusion can be used, but
+  I suspect not because the parent activation state might be moved to off-chip
+  storage where some internal on-chip mutex is not possible.  Maybe if the
+  parent activation state (for reactivation) is instead not stored in the same
+  slot as the join point value then ReadJoinValue can check if there's a value,
+  if there's not it sets slot that indicates reactivation needed, and then
+  checks again if there's a value because other thread could have set it after
+  the first check.  But, I suspect there's still a race such that both the
+  parent and child will try to activate the parent, because the parent's
+  ReadJoinValue sees the new value and so immediately continues the parent, and
+  the child's EnterJoinResult sees the parent waiting for the value and so
+  reactivates it.  But, maybe I'm wrong and this can be made to work.
+
+? The "futures" extension, somewhat similar to join points but allowed to be
+  arbitrarily made part of any data structure and allowed to be arbitrarily
+  passed to any thread, seems to have the same concurrency race problem as the
+  above paragraph but even more tricky because the future can be arbitrarily
+  passed around.  J.Dennis mentions it as a means of allowing parallel progress
+  of computations, e.g. transaction processing procedures, before a value is
+  needed.  It seems to me, this can be achieved with streams, and doesn't
+  require an additional "future" type of thing - anywhere a future would be used
+  just use a stream that will only have one value.  But! it seems the value
+  would have to be removed from the stream, thus removing it from the data
+  structure, which would prevent it from being accessible through the structure
+  in the future.  The value could be put back in the stream after being
+  removed.  This would work if only one thread wants to access the value (via
+  the stream), but is non-determinate, maybe even broken, if multiple threads
+  read the stream.  Though, the same issues exists for futures if multiple
+  threads attempt to read a future.
+
+? Can the procedure activation state (pointer to code segment, instruction
+  index, pointer to local data segment, pointer to stored-registers segment), be
+  moved to main storage?  This seems desirable (maybe necessary?) so that the
+  work of a child thread, including its children, can use the local processor
+  space.  Otherwise it seems, if the parent threads' states are kept in the
+  processor, all the space in the processor will quickly be consumed.  A child
+  thread might not return for a very long time, so the parent's state needs to
+  be stored in main persistent memory.
+
+? "Note that an error in program construction, such as an attempt by the master
+  thread to issue a join ticket twice for the same join point, will cause a
+  thread to hang." - How/why is this possible?
+
+- "It should be noted that this guarantee of determinacy requires that no more
+  than one slave thread be given a join ticket to the same join point. After
+  all, if two asynchronous threads can arrive at the join point in either order,
+  and the join point accepts the first to arrive, then a hazard will exist. This
+  is avoided by having the spawn instruction set the join point flag when it
+  issues a join ticket, and making it an error to attempt use of a marked join
+  point." - Except if the "combining operator" extension is implemented, in
+  which case a join point can have multiple join tickets given to multiple
+  threads.  I think I should postpone implementing this extension, until I have
+  more experience with my emulator.
+
+
+
+
+
+
+Instruction Set:
+
+- ChunkCreate : Allocate a new mutable chunk. Return its UID.
+
+- ChunkSet : Set fields of a mutable chunk. Cannot place the UID of an unsealed
+             chunk into another unsealed chunk.
+
+- ChunkSeal : Make a chunk immutable.
+
+- ChunkGet : Get fields of a mutable chunk.
+
+"The Fresh Breeze instruction set facilitates the creation and use of chunks. A
+ChunkCreate instruction allocates a new chunk returning its UID. New chunks are
+considered unsealed, meaning that they are mutable, and can be updated using the
+ChunkSet instruction. To prevent the formation of heap cycles, the ChunkSet
+instruction cannot place the UID of an unsealed chunk into another unsealed
+chunk. A chunk can be sealed, or made immutable, by a ChunkSeal instruction.
+Directed Acyclic Graphs (DAGs) of chunks can be created by placing UIDs of
+sealed chunks into newly-created unsealed chunks using the ChunkSet instruction.
+Data structures in Fresh Breeze programs are represented using these chunk
+DAGs. Arithmetic operations cannot be performed on UIDs, preventing functions
+from accessing chunks that were not passed in as parameters and aren't reachable
+from pointers in the parameter chunks. Chunk data can be read using the ChunkGet
+instruction. Both the ChunkGet and ChunkSet instructions provide for bulk memory
+transfers by operating on a range of registers, rather than being restricted to
+moving one word at a time."
+
+"The Fresh Breeze program execution model is designed so that cycles in the heap
+cannot be constructed. This is ensured by the rule that updates to the contents
+of chunks are disallowed once they are shared, and marking pointers to chunks in
+process of definition (creation) so that a thread may not store them in any
+chunk that is under construction."
+
+
+- Spawn :
+
+"... having the spawn instruction set the join point flag when it issues a join
+ticket, and making it an error to attempt use of a marked join point."
+
+- EnterJoinResult :
+
+- ReadJoinResult :
+
+"Basic parallelism is achieved through a Spawn instruction, which starts the
+execution of a slave thread, passing it some parameters, and leaving a "join
+ticket" as a handle on that thread. UIDs of unsealed chunks cannot be passed as
+parameters through Spawn calls, preventing multiple threads from modifying the
+same chunk. When the slave thread completes its computation it returns a value
+using the EnterJoinResult instruction. The master thread can issue a
+ReadJoinResult instruction to retrieve the value returned by the slave. If the
+slave has not finished, the ReadJoinResult instruction stalls until the slave
+thread is done. By issuing several Spawn instructions before reading the join
+results, multiple parallel slave threads can be instantiated. Other forms of
+parallelism, such as producer/consumer parallelism, as well as explicitly
+non-determinate computations are also supported."
+
+"Special instructions are provided to access a join point. The Spawn instruction
+sets a flag in the join point and starts execution by the slave thread after
+storing a joint ticket in its local data segment. The EnterJoinResult
+instruction is used by the slave thread to enter its result in the joint point
+identified by its join ticket. Execution of the EnterJoinResult instruction
+causes the slave thread to quit. The master thread may only read the join value
+by using the ReadJoinValue instruction which returns the join value if it is
+available, or suspends the master thread if the join value has not yet been
+entered. Note that the EnterJoinResult instruction must resume the master thread
+if it finds that the master thread has been suspended. All of these instructions
+are “architected”; that is, they are implemented by the Fresh Breeze hardware so
+that their rules of use cannot be violated. In particular, information in the
+join point or join ticket cannot be read or written by ordinary instructions."
+
+How is this enforced?  Procedures necessarily have access to their local data
+segment, which contains their join ticket which contains a pointer to the master
+thread's local data segment which contains the join point.
+
+Maybe: an activation's pointer to its local data segment is kept in a special
+register; the value of this register cannot be retrieved except by the special
+instruction that links activations, and so procedures can never manipulate it;
+when accessing the procedure's local variables slots in the local data segment
+via ChunkGet and ChunkSet instructions, it's disallowed to access the slots of
+the LDS corresponding to the join slots, i.e. Chunk{Get,Set} with an operand
+being the special LDS register will not allow the protected join slots to be
+accessed.  But, the number of join points (in a parent's LDS) needs to be
+variable, i.e. a pre-established fixed range of LDS indices cannot be assumed to
+be join-point slots.  Maybe the solution is to have a pre-established fixed slot
+of the LDS be a pointer to a variable-sized array of join points - this way
+access to this slot via the LDS register can be controled (and because the value
+of the LDS register cannot be transferred uncontrolled, the pointer to the LDS
+cannot end up in a register that would allow general access to a slot that is a
+join point).
+
+
+???
+
+"The array Create, Augment, Combine, and Read operations will be implemented by
+processor instructions that direct action by the DAUs. Because these operations
+may require multiple steps, they will likely be supported in a way that uses
+several machine instructions, perhaps including a repeat mechanism. The details
+of these operations are under development."
+
+
+???
+
+- CreateGuard :
+
+- GuardSwap :
+
+"In the Fresh Breeze machine, a guard is a special kind of memory element
+(chunk) that exists only in the SMS, thereby avoiding problems associated with
+cached copies. The instruction CreateGaurd is passed directly to the SMS and
+returns a reference to a unique guard chunk. The GuardSwap instruction is also
+passed directly to the SMS where it is forwarded to the component of the SMS
+where the guard was allocated. With this arrangement, GuardSwap instructions
+executed by independent activities on any processing chips can be processed by
+the SMS component in immediate succession; the rate at which transactions can be
+processed may be as fast as the SMS unit can process successive swap
+instructions, and is not limited by the speed of any of the MTPs."
+
+"In essence, the guard holds a reference to the tail element of the (ordered)
+stream of transaction requests. An activity wishing to enter a transaction
+request forms a request stream element with an empty “next” element field. It
+then performs a swap operation that substitutes the pointer to its stream
+element (the new tail element) for the current pointer held by the
+guard. Finally it installs the pointer of the (old) tail in the “next” field of
+the new stream element."
+
+? Hmm, I think the last sentence may be misleading or incorrect.  Based on the
+below paragraph about filling the "next" field long after the chunk was
+allocated, and based on the perception that a stream is not supposed to be a
+stack, I think the sentence is supposed to mean that the new tail has its "next"
+field set to the value from the old tail (because that value might be meaningful
+to some types of stream, e.g. a thunk to drive computing more elements, like a
+Scheme stream?), and then the old tail has its "next" field set to point to the
+new tail (so that the chain of stream chunks is extended at the end with the new
+tail).  Otherwise, if the sentence is correct, then the chain of links goes from
+tail to head, which means to get the head the entire chain must be traversed.
+Hmm, maybe I'm not understanding that the sentence is correct and somehow it
+works correctly?
+
+
+- EnterRequest :
+
+"The instruction EnterRequest takes the guard and a data structure representing
+a transaction request as arguments, and installs the request as a new element of
+the request stream. Any thread that has been given a pointer to the guard object
+may execute the EnterRequest instruction, hence the guard is an implementation
+of the nondeterminate stream merge operator. It is the only source of
+nondeterminate behavior in a Fresh Breeze system."
+
+"The operations StreamEnter and StreamRemove are supported, where, in
+particular, the StreamRemove operation causes the executing activity to suspend
+if the stream contains no elements, and to resume just when elements are entered
+in the stream. For the StreamEnter operation to work properly with this choice
+of representation for streams, it must be possible to fill in a slot (the “next”
+reference) perhaps long after the chunk was allocated and filled with stream
+elements. To guarantee that a cycle cannot be created, the stream chunk is
+marked as being of a special stream type, and can only be referenced by the
+“next” reference in another chunk of stream type. This sort of mechanism is
+similar to that of “incremental arrays” (“I-structures”)"
+
+? So, how to initially reference a stream-type chunk, if it can only be
+  referenced by another stream-type chunk?  It would seem that some
+  non-stream-type chunk at some point needs to reference a stream-type chunk.
+
+

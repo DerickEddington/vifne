@@ -1,0 +1,14 @@
+There will be a scheme-script program named vifne, that takes optional
+command-line arguments, that starts the emulator by mmap'ing the storage file(s)
+and resuming the emulated system's execution from where it left off.
+
+The main storage file will be named shared-chunk-storage, and will be found in
+the current directory, by default.
+
+There maybe should be a CL-arg for the number of processors to emulate, which
+means the number of Posix processes to fork to act as processors.  TODO: There
+might be difficulties with resuming a system with a different number of
+processors than it ran on the previous time, so maybe this option shouldn't
+exist and the number of processors will be hard-coded in the
+shared-chunk-storage.
+
