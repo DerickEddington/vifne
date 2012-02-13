@@ -7,16 +7,22 @@
 (library (vifne posix)
   (export
     getconf
+    mmap-storage-file
+    munmap
+    file-size
     #| TODO
     fork stuff ...
     pipe stuff ...
     mmap stuff ...|#)
   (import
     (rnrs base)
+    (rnrs control)
     (rnrs io ports)
-    (only (ikarus) process waitpid wstatus-exit-status)
-    #| (only (ikarus ???) ??? fork and pipe stuff I think)
-    (vifne foreign) to implement mmap stuff FFI |# )
+    (only (ikarus) process waitpid wstatus-exit-status file-size)
+    (only (ikarus foreign) free errno pointer->integer integer->pointer)
+    (vifne foreign)
+    #| (only (ikarus ???) ??? fork and pipe stuff I think) |# )
+
 
   (define (getconf . a)
     (define (S p)
@@ -29,5 +35,85 @@
         (for-each close-port (list in out err))
         (if (zero? w) o (apply error 'getconf e a)))))
 
+  ;-----------------------------------------------------------------------------
+
+  ; TODO: These constants might not be universal.
+  (define PROT_READ 1)
+  (define PROT_WRITE 2)
+  (define MAP_SHARED 1)
+  (define MAP_FAILED -1)
+  (define O_RDWR 2)
+
+
+  (define strerror-raw (foreign ("strerror" signed-int) pointer))
+
+  (define (strerror e) (c-str->string (strerror-raw e)))
+
+  (define (error/errno who . args)
+    (apply error who (strerror (errno)) args))
+
+
+  (define mmap-raw (foreign ("mmap" pointer          ; void*   addr
+                                    unsigned-long    ; size_t  length
+                                    signed-int       ; int     prot
+                                    signed-int       ; int     flags
+                                    signed-int       ; int     fd
+                                    signed-long)     ; off_t   offset
+                            pointer))  ; returns void*
+
+  (define (mmap . args)
+    (let ((p (apply mmap-raw args)))
+      (when (= MAP_FAILED (pointer->integer p)) (apply error/errno 'mmap args))
+      p))
+
+
+  (define munmap-raw (foreign ("munmap" pointer         ; void*   addr
+                                        unsigned-long)  ; size_t  len
+                              signed-int))  ; returns int
+
+  (define (munmap . args)
+    (unless (zero? (apply munmap-raw args))
+      (apply error/errno 'munmap args)))
+
+
+  (define open-raw (foreign ("open" pointer           ; char*   pathname
+                                    signed-int        ; int     flags
+                                    unsigned-int)     ; mode_t  mode
+                            signed-int))  ; returns int
+
+  (define open
+    (case-lambda
+      ((pathname flags mode)
+       (let* ((s (string->c-str pathname))
+              (fd (open-raw s flags mode)))
+         (free s)
+         (when (negative? fd) (error/errno 'open pathname flags mode))
+         fd))
+      ((pathname flags)
+       (open pathname flags 0))))
+
+
+  (define close-raw (foreign ("close" signed-int) signed-int))
+
+  (define (close fd) (unless (zero? (close-raw fd)) (error/errno 'close fd)))
+
+
+  (define (open-storage-file file) (open file O_RDWR))
+
+  (define (mmap-storage-file file)
+    (let* ((fd (open-storage-file file))
+           (p (mmap (integer->pointer 0) (file-size file)
+                    (+ PROT_READ PROT_WRITE)
+                    MAP_SHARED fd 0)))
+      (close fd)
+      p))
+
+  ;-----------------------------------------------------------------------------
+
+  ; TODO: fork stuff
+
+  ;-----------------------------------------------------------------------------
+
+  ; TODO: pipe stuff
 
 )
