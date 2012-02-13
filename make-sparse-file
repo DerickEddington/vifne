@@ -1,0 +1,3 @@
+#! /bin/bash
+
+dd  bs=1  count=0  if=/dev/null  seek=${2:?}  of=${1:?}
