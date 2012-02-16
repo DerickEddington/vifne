@@ -19,7 +19,7 @@
     (rnrs control)
     (rnrs io ports)
     (only (ikarus) process waitpid wstatus-exit-status file-size)
-    (only (ikarus foreign) free errno pointer->integer integer->pointer)
+    (only (ikarus foreign) free errno)
     (vifne foreign)
     #| (only (ikarus ???) ??? fork and pipe stuff I think) |# )
 

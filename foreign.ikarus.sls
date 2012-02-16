@@ -11,7 +11,9 @@
   (export
     foreign
     string->c-str
-    c-str->string)
+    c-str->string
+    pointer->integer
+    integer->pointer)
   (import
     (rnrs base)
     (rnrs io ports)
