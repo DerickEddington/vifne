@@ -13,7 +13,9 @@
     string->c-str
     c-str->string
     pointer->integer
-    integer->pointer)
+    integer->pointer
+    pointer-ref-u64
+    pointer-set-u64!)
   (import
     (rnrs base)
     (rnrs io ports)
@@ -49,5 +51,8 @@
         (if (zero? x)
           (bytevector->string (u8-list->bytevector (reverse a)) (native-transcoder))
           (loop (cons x a) (+ 1 i))))))
+
+  (define (pointer-ref-u64 p i) (pointer-ref-c-unsigned-long-long p (* 8 i)))
+  (define (pointer-set-u64! p i v) (pointer-set-c-long-long! p (* 8 i) v))
 
 )

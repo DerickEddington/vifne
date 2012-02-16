@@ -51,3 +51,4 @@
 
 
 (start-emulator storage-file number-processors)
+(stop-emulator)

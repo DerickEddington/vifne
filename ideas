@@ -30,9 +30,22 @@ Ideas:
   or is it sufficient just to simulate global chunk IDs, orthogonal persistence,
   write-once only / sealing, reference counting, and garbage collection?
 
-? To support orthogonal persistence, the Posix file-system must be used.  To
-  support persistence across Posix process instances, ...?  To support global
-  chunk IDs ...?
+- "There is no relation of the 64-bit number that is the capability code of a
+  chunk, and the physical location where it is held in the Storage System. This
+  property permits new data to be stored in proximity to the location in the
+  system where they are generated. To support this property hardware-supported
+  associative search is used to map a global pointer to the physical location
+  where the designated chunk is to be found.
+
+  Another function performed by the Storage System is to supply free capability
+  codes to the processing chips for assignment to newly created chunks. A data
+  structure is maintained, that keeps a record of available codes. Capability
+  codes are assigned from the free pool and returned to the pool when the
+  reference count shows they are no longer needed.
+
+  The principal components at each level of the Storage System are multiple
+  storage devices to hold data chunks, and an associative directory for mapping
+  chunk identifiers (global pointers) to the locations where chunks reside."
 
 ? The per-processor Active Task List and/or the per-processor Pending Task Queue
   and the global Deferred Task Queue (for pending tasks when there's no room in
@@ -42,11 +55,6 @@ Ideas:
   the real FB design.  However, the real design may still support resumption
   because the processor state, excluding registers I guess, is in chunks which
   can be stored in the SMS?  Need to learn more about the real design.
-
-x Maybe the persistent store will be implemented as a tree of Posix folders with
-  leaves being fixed-size files.  This simulates configurable depth of levels
-  (depth of folders) and configurable addition of new storage capacity.  But why
-  do I want to simulate that at this early phase?
 
 - Maybe the persistent store will be implemented as a single mmap'ed file of
   fixed size.  Chunk IDs are simply offsets (scaled?) into the file.  (Maybe in
@@ -97,8 +105,6 @@ x Maybe the persistent store will be implemented as a tree of Posix folders with
   asynchronous message passing to emulate electrical busses.  E.g. the SMS
   receives and implements the CreateGuard and GuardSwap instructions, as well as
   fulfilling requests for storage access.
-
-? How to provide real concurrency ...?  Threads or processes?
 
 ? How to implement the chunk memory manager ...?  Maybe as its own process
   (forked from Ikarus) with pipes (passing textual Scheme datums?) for servicing
@@ -215,6 +221,8 @@ x Maybe the persistent store will be implemented as a tree of Posix folders with
   which case a join point can have multiple join tickets given to multiple
   threads.  I think I should postpone implementing this extension, until I have
   more experience with my emulator.
+
+- "Processor registers will be tagged to flag those holding capabilities."
 
 
 

@@ -1,0 +1,21 @@
+The emulated processors are implemented in Scheme, and so to deal with chunk
+data, the backing mmap'ed file memory must be copied to/from Scheme data
+structures.  This happens to also emulate the real SMS in that chunks are copied
+to/from processors.  So, there is the opportunity to emulate the processor-local
+caching of the real design - by having a cache of chunks copied from the mmap'ed
+file memory.
+
+I want to minimize the amount of lower-level mechanisms of the real design that
+are emulated, because I'm interested in exploring the higher-level semantics.
+So, I think the emulator's chunk IDs will be simply offsets into the mmap'ed
+file, because, unlike the real design, I think it's unnecessary to separate
+chunk IDs from storage locations.  This eliminates the complexities of having in
+the emulated SMS the mechanisms for associating chunk IDs with locations.  From
+the programmer's point of view, the semantics should still be the same as if
+chunk IDs were separated, because that view doesn't expose anything where it
+makes a difference (I think).
+
+The emulated processor will be a forked Ikarus process.  It will have a cache
+(private, because forked processors won't shared memory) of chunks, implemented
+in Scheme.  And it will have an "association unit" that is an associative array
+mapping chunk IDs to their locations in the cache.

@@ -6,19 +6,18 @@
 
 (library (vifne start)
   (export
-    start-emulator)
+    start-emulator
+    stop-emulator)
   (import
     (rnrs base)
-    (rnrs io simple) #|TODO: temporary import|#
-    (vifne posix))
+    (vifne posix)
+    (vifne storage))
 
   (define (start-emulator storage-file number-processors)
-    ;TODO
-    (begin
-      (write `(start-emulator ,storage-file ,number-processors)) (newline)
+    (storage-set! (mmap-storage-file storage-file)
+                  (file-size storage-file)))
 
-      (let ((p (mmap-storage-file storage-file)))
-        (write `(mapped-storage-file-pointer: ,p)) (newline)
-        (munmap p (file-size storage-file)))))
+  (define (stop-emulator)
+    (apply munmap (storage-get)))
 
 )

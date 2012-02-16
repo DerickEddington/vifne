@@ -7,15 +7,18 @@
 
 (library (vifne config)
   (export
+    chunk-size
+    id-size
     default-storage-file
     number-host-processors)
   (import
     (rnrs base)
     (only (vifne posix) getconf))
 
+  (define chunk-size 128)  ; 1024 bits
+  (define id-size 8)       ; 64 bits
 
   (define default-storage-file "shared-chunk-storage")
-
 
   (define (number-host-processors)
     (let* ((x (getconf "_NPROCESSORS_ONLN")) (l (string-length x)))
