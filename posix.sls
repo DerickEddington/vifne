@@ -2,8 +2,6 @@
 ; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
 ; LICENSE from the original collection this file is distributed with.
 
-; This library uses Ikarus to provide the needed POSIX facilities.
-
 (library (vifne posix)
   (export
     mmap-storage-file
@@ -18,18 +16,13 @@
     O_EXCL
     S_IRUSR
     S_IWUSR
-    #| TODO
-    fork stuff ...|#)
+    #| TODO: fork stuff ...|#)
   (import
     (rnrs base)
     (rnrs control)
-    (rnrs io ports)
-    ; TODO: Use FFI instead of ikarus imports, to make this library general.
-    (only (ikarus) file-size)
-    (only (ikarus foreign) malloc free errno)
     (vifne foreign)
     (vifne host)
-    #| (only (ikarus ???) ??? fork stuff I think) |# )
+    (vifne posix misfits))
 
 
   (define strerror-raw (foreign ("strerror" signed-int) pointer))
@@ -38,6 +31,19 @@
 
   (define (error/errno who . args)
     (apply error who (strerror (errno)) args))
+
+
+  (define malloc-raw (foreign ("malloc" unsigned-long)  ; size_t  size
+                              pointer))  ; returns void*
+
+  (define (malloc size)
+    (let ((p (malloc-raw size)))
+      (when (and (positive? size) (zero? (pointer->integer p)))
+        (error/errno 'malloc size))
+      p))
+
+  (define free (foreign ("free" pointer)  ; void*  ptr
+                        void))
 
 
   (define mmap-raw (foreign ("mmap" pointer          ; void*   addr
