@@ -10,18 +10,25 @@
     mmap-storage-file
     munmap
     file-size
+    malloc
+    free
+    error/errno
+    O_RDONLY
+    O_WRONLY
+    O_CREAT
+    O_EXCL
+    S_IRUSR
+    S_IWUSR
     #| TODO
-    fork stuff ...
-    pipe stuff ...
-    mmap stuff ...|#)
+    fork stuff ...|#)
   (import
     (rnrs base)
     (rnrs control)
     (rnrs io ports)
     (only (ikarus) process waitpid wstatus-exit-status file-size)
-    (only (ikarus foreign) free errno)
+    (only (ikarus foreign) malloc free errno)
     (vifne foreign)
-    #| (only (ikarus ???) ??? fork and pipe stuff I think) |# )
+    #| (only (ikarus ???) ??? fork stuff I think) |# )
 
 
   (define (getconf . a)
@@ -37,12 +44,18 @@
 
   ;-----------------------------------------------------------------------------
 
-  ; TODO: These constants might not be universal.
+  ; TODO: These constants' values are probably not universal across all systems.
   (define PROT_READ 1)
   (define PROT_WRITE 2)
   (define MAP_SHARED 1)
   (define MAP_FAILED -1)
+  (define O_RDONLY 0)
+  (define O_WRONLY 1)
   (define O_RDWR 2)
+  (define O_CREAT #x40)
+  (define O_EXCL #x80)
+  (define S_IRUSR #o400)
+  (define S_IWUSR #o200)
 
 
   (define strerror-raw (foreign ("strerror" signed-int) pointer))
@@ -111,9 +124,5 @@
   ;-----------------------------------------------------------------------------
 
   ; TODO: fork stuff
-
-  ;-----------------------------------------------------------------------------
-
-  ; TODO: pipe stuff
 
 )

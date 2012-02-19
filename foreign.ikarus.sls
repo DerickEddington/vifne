@@ -9,6 +9,7 @@
 
 (library (vifne foreign)
   (export
+    foreign-library
     foreign
     string->c-str
     c-str->string
@@ -26,14 +27,20 @@
 
   (define handle (or (dlopen) (dlfail 'handle)))
 
-  (define (foreign-procedure name type)
+  (define (foreign-library name)
+    (or (dlopen name #T #F)  ; #T for lazy, #F for local
+        (dlfail 'foreign-library name)))
+
+  (define (foreign-procedure name type lib)
     ((apply make-c-callout type)
-     (or (dlsym handle name) (dlfail 'foreign-procedure name))))
+     (or (dlsym lib name) (dlfail 'foreign-procedure name))))
 
   (define-syntax foreign
     (syntax-rules ()
-      ((_ (name arg-types ...) ret-type)
-       (foreign-procedure name '(ret-type (arg-types ...))))))
+      ((_ (name arg-types ...) ret-type lib)
+       (foreign-procedure name '(ret-type (arg-types ...)) lib))
+      ((_ (n a ...) r)
+       (foreign (n a ...) r handle))))
 
   (define (string->c-str s)
     ; Remember: the returned pointer needs to be freed.

@@ -10,6 +10,7 @@
     chunk-size
     id-size
     default-storage-file
+    posix-message-queue-library
     number-host-processors)
   (import
     (rnrs base)
@@ -19,6 +20,8 @@
   (define id-size 8)       ; 64 bits
 
   (define default-storage-file "shared-chunk-storage")
+
+  (define posix-message-queue-library "librt.so")
 
   (define (number-host-processors)
     (let* ((x (getconf "_NPROCESSORS_ONLN")) (l (string-length x)))
