@@ -115,9 +115,7 @@
 
   (define (mmap-storage-file file)
     (let* ((fd (open-storage-file file))
-           (p (mmap (integer->pointer 0) (file-size file)
-                    (+ PROT_READ PROT_WRITE)
-                    MAP_SHARED fd 0)))
+           (p (mmap NULL (file-size file) (+ PROT_READ PROT_WRITE) MAP_SHARED fd 0)))
       (close fd)
       p))
 

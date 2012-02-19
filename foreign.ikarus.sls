@@ -15,6 +15,7 @@
     c-str->string
     pointer->integer
     integer->pointer
+    NULL
     pointer-ref-u64
     pointer-set-u64!)
   (import
@@ -22,6 +23,8 @@
     (rnrs io ports)
     (rnrs bytevectors)
     (ikarus foreign))
+
+  (define NULL (integer->pointer 0))
 
   (define (dlfail who . a) (apply error who (dlerror) a))
 

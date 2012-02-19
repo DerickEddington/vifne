@@ -33,7 +33,7 @@
     (case-lambda
       ((name oflag mode)
        (let* ((s (string->c-str name))
-              (mqd (mq_open-raw s oflag mode (integer->pointer 0))))
+              (mqd (mq_open-raw s oflag mode NULL)))
          (free s)
          (when (negative? mqd) (error/errno 'mq_open name oflag mode))
          mqd))
@@ -59,7 +59,7 @@
                                   signed-long))  ; returns ssize_t
 
   (define (mq_receive mqd p len)
-    (let ((s (mq_receive-raw mqd p len (integer->pointer 0))))
+    (let ((s (mq_receive-raw mqd p len NULL)))
       (when (negative? s) (error/errno 'mq_receive mqd p len))
       s))
 

@@ -1,5 +1,3 @@
-Replace all (integer->pointer 0) with a null exported from (vifne foreign).
-
 Factor-out host-specific things, into a (vifne host) library that imports and
 re-exports one of various (vifne host <name>) libraries.
     O_RDONLY
