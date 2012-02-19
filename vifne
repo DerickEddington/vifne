@@ -8,7 +8,8 @@
         (rnrs programs)
         (rnrs lists)
         (vifne start)
-        (vifne config))
+        (vifne config)
+        (vifne host))
 
 (define (string-non-empty? x) (positive? (string-length x)))
 

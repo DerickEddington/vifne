@@ -9,25 +9,13 @@
   (export
     chunk-size
     id-size
-    default-storage-file
-    posix-message-queue-library
-    number-host-processors)
+    default-storage-file)
   (import
-    (rnrs base)
-    (only (vifne posix) getconf))
+    (rnrs base))
 
   (define chunk-size 128)  ; 1024 bits
   (define id-size 8)       ; 64 bits
 
   (define default-storage-file "shared-chunk-storage")
-
-  (define posix-message-queue-library "librt.so")
-
-  (define (number-host-processors)
-    (let* ((x (getconf "_NPROCESSORS_ONLN")) (l (string-length x)))
-      (assert (and (positive? l) (char=? #\newline (string-ref x (- l 1)))))
-      (let ((n (string->number (substring x 0 (- l 1)))))
-        (assert (and (integer? n) (exact? n) (not (negative? n))))
-        n)))
 
 )

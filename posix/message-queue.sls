@@ -14,11 +14,11 @@
   (import
     (rnrs base)
     (rnrs control)
-    (vifne config)
+    (vifne host)
     (rename (vifne foreign) (foreign foreign*))
     (vifne posix))
 
-  (define mq-lib (foreign-library posix-message-queue-library))
+  (define mq-lib (foreign-library message-queue-library-name))
 
   (define-syntax foreign (syntax-rules () ((_ x ...) (foreign* x ... mq-lib))))
 
