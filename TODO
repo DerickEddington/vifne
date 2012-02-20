@@ -1,0 +1,18 @@
+Make layer over Posix message queues for communicating Scheme datums as UTF-8.
+
+Need to be careful about deadlocking the SMS or a processor because of
+message-queue operations blocking.  What if the SMS replies to a processor but
+the processor's message queue is full - the SMS will block until the processor
+removes a message, unless the MQs are made non-blocking.  But non-blocking MQs
+requires buffering unsent messages and coordinating/scheduling retrying to send
+unsent messages - very different than real hardware.  Is it possible to make
+this dataflow system, via communication with MQs, determinate such that deadlock
+is impossible?  I think I'll wait until I have an initial system running, to see
+how these issues might happen.
+
+I suspect that the SMS process should have a higher host-OS scheduling priority
+than the processor processes, so it can keep up with the amount of requests.
+
+Does an Interprocessor Network need to exist, so the processors can communicate
+things such as supplying a join result to an activity on another processor?  If
+so, I suppose it should use Posix message queues.

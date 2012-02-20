@@ -22,9 +22,86 @@ mapping chunk IDs to their locations in the cache.
 
 
 How is chunk ID allocation done?  Does allocating an ID also make that ID's
-ref-count equal 1?
+ref-count equal 1 - yes.
 
-How is reference counting and GC done?
+How is reference counting and GC done - messages to the SMS.  Also, when a count
+reaches zero, all the referenced chunks must have their counts decremented, and
+so on recursively.
+
+How and where to store the various auxiliary metadata about chunks?  Maybe in
+the mmap'ed file itself, following each chunk.  I.e. the format of the file is
+staggered like: chunk1-fields chunk1-meta chunk2-fields chunk2-meta ... .  This
+is different than the real FB design, but not noticeable semantically (I think).
+The metadata will have the same size as a chunk, for offset calculation
+convenience and to play nicely with the host-CPU cache lines.
+
+What is in a chunk metadata?
+- Flags for each field that indicate the type of value.
+- Reference count.
+- Pointer to next free chunk, if reference count is zero.
+
+To keep sparse storage files sparse, it must not be necessary for the "next
+free" fields of free chunks to have a non-zero value.  So, if a free chunk
+(refcount zero) has a "next free" field value of zero, that means the next free
+chunk is the one that follows.  I think this requires checking each time a "next
+free" field is zero that the end of the storage space is not exceeded - this is
+the only way to know if there are more free chunks or not.
+
+There must be a "free list" pointer stored in the storage file, to know and
+update the list of free chunks.  I think this should be in a meta block at the
+head of the storage file.  (Other special data could be kept in this meta block
+as well, such as handles/descriptors of peripheral devices.)  Initially, The
+free list pointer will move sequentially down the chunks in the file (because
+those chunks' "next free" fields are zero), but the first freed chunk's "next
+free" will become what the free list pointer was and then the free list pointer
+will point to the freed chunk.  Thus, the sparseness of the file will be
+preserved as much as possible.
+
+
+
+
+Message types to SMS:
+
+- processor <mq-name:string> : Informs the SMS of a processor and the name of
+  the message queue to reply to it.  Replies with "processor-ID" message to that
+  message queue.
+
+- allocate <count> <pid> : Get multiple free chunk IDs, as many as the given
+  count.  Replies with "chunk-IDs" message to the message queue associated with
+  the given processor ID.  Each allocated chunk has its reference count set to
+  1.
+
+- increment <cid> ...  : Increment the reference count of each given chunk.
+
+- decrement <cid> ...  : Decrement the reference count of each given chunk.
+  Free any chunks whose reference count reaches zero, and decrement the
+  reference counts of any chunks referenced by those now-free chunks (and so on
+  recursively).
+
+(Messages for reading/loading and writing/storing chunks are not necessary,
+unlike the real FB design, because the emulator design allows processor
+processes to directly access the mmap'ed storage file via address space.  This
+is safe because of the single-assignment and immutability of chunks, including
+for the metadata that must be updated (right?).)
+
+
+Message types from the SMS:
+
+- processor-ID <pid> : Informs a processor of the ID number the SMS assigned it.
+  This ID number must be included in "allocate" messages from the processor to
+  the SMS, so the SMS knows who to respond to.
+
+- chunk-IDs <cid> ... : chunk IDs newly allocated to a processor.
+
+
+
+
+
+
+
+
+
+[Old, but still some relevance:]
 
 If multiple processes concurrently access the mapped storage file, all the usual
 memory consistency issues apply.  Do atomic processor instructions work for
@@ -62,5 +139,3 @@ queues as it needs, then fork the processor processes which will have access to
 the the SMS queue and their queue and can close the others' queues (this
 requires a loop counter variable so each forked child can know its identity to
 know what queue to take).
-
-

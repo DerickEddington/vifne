@@ -150,6 +150,10 @@ Ideas:
   data segment of the master thread; and (2) the index of the join point within
   the master thread local data segment."
 
+- "Status information for suspended activities is held in data chunks in the
+  DAUs." - I think this implies that those chunks can be moved to the SMS if
+  space is needed for newer data in a DAU, which makes that status persistent.
+
 ? How to implement suspending a thread/activation, when it tries to read a
   non-ready join point, so that it can be reactivated when the other thread
   makes the join point ready?  The activation state must be stored somewhere
@@ -223,6 +227,10 @@ Ideas:
   more experience with my emulator.
 
 - "Processor registers will be tagged to flag those holding capabilities."
+
+? I think peripheral devices should be identified using chunk IDs, because this
+leverages their capability security and maintains only one type of
+ID/reference/capability throughout the system.
 
 
 
