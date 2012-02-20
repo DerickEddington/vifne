@@ -7,8 +7,9 @@
 
 (library (vifne host)
   (export
-    message-queue-library-name
     number-host-processors
+    message-queue-library-name
+    message-queue-msgsize_max
     PROT_READ
     PROT_WRITE
     MAP_SHARED

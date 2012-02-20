@@ -16,6 +16,7 @@
     pointer->integer
     integer->pointer
     NULL
+    memcpy
     pointer-ref-u64
     pointer-set-u64!)
   (import
@@ -45,9 +46,11 @@
       ((_ (n a ...) r)
        (foreign (n a ...) r handle))))
 
+  (define NT (native-transcoder))
+
   (define (string->c-str s)
     ; Remember: the returned pointer needs to be freed.
-    (let* ((b (string->bytevector s (native-transcoder)))
+    (let* ((b (string->bytevector s NT))
            (l (bytevector-length b))
            (m (malloc (+ 1 l))))  ; + 1 for terminating '\0'
       (assert (not (zero? (pointer->integer m))))
@@ -59,7 +62,7 @@
     (let loop ((a '()) (i 0))
       (let ((x (pointer-ref-c-unsigned-char c i)))
         (if (zero? x)
-          (bytevector->string (u8-list->bytevector (reverse a)) (native-transcoder))
+          (bytevector->string (u8-list->bytevector (reverse a)) NT)
           (loop (cons x a) (+ 1 i))))))
 
   (define (pointer-ref-u64 p i) (pointer-ref-c-unsigned-long-long p (* 8 i)))

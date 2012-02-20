@@ -4,8 +4,9 @@
 
 (library (vifne host linux)
   (export
-    message-queue-library-name
     number-host-processors
+    message-queue-library-name
+    message-queue-msgsize_max
     PROT_READ
     PROT_WRITE
     MAP_SHARED
@@ -19,11 +20,16 @@
     S_IWUSR)
   (import
     (rnrs base)
+    (rnrs io simple)
+    (rnrs io ports)
     (vifne posix sysconf))
+
+  (define (number-host-processors) (sysconf _SC_NPROCESSORS_ONLN))
 
   (define message-queue-library-name "librt.so")
 
-  (define (number-host-processors) (sysconf _SC_NPROCESSORS_ONLN))
+  (define (message-queue-msgsize_max)
+    (call-with-input-file "/proc/sys/fs/mqueue/msgsize_max" get-datum))
 
   ; These values were taken from my Ubuntu 10.10 x86_64 system.
 

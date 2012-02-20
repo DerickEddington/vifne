@@ -6,7 +6,7 @@
   (export
     mmap-storage-file
     munmap
-    file-size
+    getpid
     malloc
     free
     error/errno
@@ -31,6 +31,9 @@
 
   (define (error/errno who . args)
     (apply error who (strerror (errno)) args))
+
+
+  (define getpid (foreign ("getpid") signed-int))  ; returns pid_t
 
 
   (define malloc-raw (foreign ("malloc" unsigned-long)  ; size_t  size
@@ -95,9 +98,10 @@
 
   (define (mmap-storage-file file)
     (let* ((fd (open-storage-file file))
-           (p (mmap NULL (file-size file) (+ PROT_READ PROT_WRITE) MAP_SHARED fd 0)))
+           (l (file-size file))
+           (p (mmap NULL l (+ PROT_READ PROT_WRITE) MAP_SHARED fd 0)))
       (close fd)
-      p))
+      (list p l)))
 
   ;-----------------------------------------------------------------------------
 

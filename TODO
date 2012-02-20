@@ -1,4 +1,5 @@
-Make layer over Posix message queues for communicating Scheme datums as UTF-8.
+? How to close and unlink message queues?  How to clean-up all resources across
+the multiple processes?
 
 Need to be careful about deadlocking the SMS or a processor because of
 message-queue operations blocking.  What if the SMS replies to a processor but
