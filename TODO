@@ -1,3 +1,5 @@
+Determine approach to forking the child processes.
+
 ? How to close and unlink message queues?  How to clean-up all resources across
 the multiple processes?
 

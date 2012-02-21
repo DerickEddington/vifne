@@ -137,15 +137,15 @@
 
   (define (alloc-id!)
     (let ((id (free-list)))
-      (unless (< id storage-size) (error 'alloc-id! "storage full"))
-      (let* ((m (id->ptr id))
-             (next (ref-word m next-free-field)))
-        ; Null next means the following chunk is the next.
-        (free-list-set! (if (positive? next) next (+ id chunk&meta-size)))
-        (set-word! m reference-count-field 1)
-        #;(set-word! m pointer-flags-field 0)
-        #;(set-word! m next-free-field 0))
-      id))
+      (and (< id storage-size)
+           (let* ((m (id->ptr id))
+                  (next (ref-word m next-free-field)))
+             ; Null next means the following chunk is the next.
+             (free-list-set! (if (positive? next) next (+ id chunk&meta-size)))
+             (set-word! m reference-count-field 1)
+             #;(set-word! m pointer-flags-field 0)
+             #;(set-word! m next-free-field 0)
+             id))))
 
   (define (free-id! id)
     (let ((m (id->ptr id)))
