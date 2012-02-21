@@ -18,4 +18,15 @@
 
   (define default-storage-file "shared-chunk-storage")
 
+  ;-----------------------------------------------------------------------------
+
+  (define (exact-non-negative-integer? x) (and (integer? x) (exact? x) (not (negative? x))))
+
+  (assert (exact-non-negative-integer? chunk-size))
+  (assert (exact-non-negative-integer? (/ chunk-size 8)))
+  (assert (exact-non-negative-integer? id-size))
+  (assert (exact-non-negative-integer? (/ id-size 8)))
+  (assert (exact-non-negative-integer? (/ chunk-size id-size)))
+  (assert (< id-size chunk-size))
+
 )

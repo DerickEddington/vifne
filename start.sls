@@ -17,9 +17,10 @@
 
   (define number-processors)
 
-  (define (start-emulator! storage-file num-procs)
+  (define (start-emulator! storage-file init-file? num-procs)
     (set! number-processors num-procs)
     (apply storage-set! (mmap-storage-file storage-file))
+    (check-storage! init-file?)
     (PID-set! (getpid))
     ; The above must happen before child processes are forked.
     )

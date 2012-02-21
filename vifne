@@ -5,6 +5,7 @@
 ;; LICENSE from the original collection this file is distributed with.
 
 (import (rnrs base)
+        (rnrs control)
         (rnrs programs)
         (rnrs lists)
         (vifne start)
@@ -22,13 +23,15 @@
   (let loop ((c (cdr (command-line))) (o '()) (a '()))
     (if (null? c)
       (if (null? a) o (cons (cons 'rest (reverse a)) o))
-      (if (and (string-non-empty? (car c)) (char=? #\- (string-ref (car c) 0)))
+      (if (and (< 1 (string-length (car c)))
+               (char=? #\- (string-ref (car c) 0)))
         (if (null? (cdr c))
           (die "argument missing value" (car c))
           (loop (cddr c) (cons (cons (car c) (cadr c)) o) a))
         (loop (cdr c) o (cons (car c) a))))))
 
-(cond ((assoc 'rest prog-args) => (lambda (p) (apply die "extra arguments" (cdr p)))))
+(let ((extra (remp (lambda (x) (member (car x) '("-f" "-n" "-i"))) prog-args)))
+  (unless (null? extra) (apply die "extra arguments" extra)))
 
 
 (define (get-arg name valid? default . fs)
@@ -50,6 +53,12 @@
 (define number-processors  (arg "-n" (string->number) exact-non-negative-integer?
                                 (number-host-processors)))
 
+(define (true-string s) (string=? "true" s))
 
-(start-emulator! storage-file number-processors)
+(define initialize-storage-file?  (arg "-i" (true-string) boolean? #F))
+
+
+(start-emulator! storage-file
+                 initialize-storage-file?
+                 number-processors)
 (stop-emulator!)
