@@ -17,7 +17,8 @@
     O_CREAT
     O_EXCL
     S_IRUSR
-    S_IWUSR)
+    S_IWUSR
+    SIGTERM)
   (import
     (rnrs base)
     (rnrs io simple)
@@ -49,5 +50,7 @@
 
   (define S_IRUSR  #o400)
   (define S_IWUSR  #o200)
+
+  (define SIGTERM 15)
 
 )

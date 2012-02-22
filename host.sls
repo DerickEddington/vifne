@@ -20,7 +20,8 @@
     O_CREAT
     O_EXCL
     S_IRUSR
-    S_IWUSR)
+    S_IWUSR
+    SIGTERM)
   (import
     (vifne host linux)
     #;(vifne host freebsd))

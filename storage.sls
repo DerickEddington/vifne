@@ -18,9 +18,7 @@
     alloc-id!
     incr-refcount!
     decr-refcount!
-    storage-set!
-    storage-get
-    check-storage!)
+    storage-set!)
   (import
     (rnrs base)
     (rnrs control)
@@ -39,6 +37,7 @@
   (define ref-word  (case id-size ((8) pointer-ref-u64)))
   (define set-word! (case id-size ((8) pointer-set-u64!)))
 
+  ;-----------------------------------------------------------------------------
 
   ; This record type represents a chunk in processor-local memory.  As such, it
   ; contains information not stored in the main shared storage.
@@ -68,18 +67,16 @@
 
   (define (seal-chunk! c) (chunk-mutable?-set! c #F))
 
+  ;-----------------------------------------------------------------------------
 
   (define storage-addr)
   (define storage-size)
 
-  (define (storage-set! p s)
-    (set! storage-addr (pointer->integer p))
-    (set! storage-size s)
-    (set! control-struct p))
-
-  (define (storage-get)
-    (list (integer->pointer storage-addr)
-          storage-size))
+  (define (storage-set! addr size init?)
+    (set! storage-addr (pointer->integer addr))
+    (set! storage-size size)
+    (set! control-struct addr)
+    (check-storage! init?))
 
   (define (id->ptr id) (integer->pointer (+ storage-addr id)))
 

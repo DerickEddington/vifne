@@ -6,32 +6,58 @@
 
 (library (vifne start)
   (export
-    start-emulator!
-    stop-emulator!)
+    start-emulator!)
   (import
     (rnrs base)
-    (rnrs control)
+    (rnrs programs)
+    (rnrs exceptions)
+    (rnrs conditions)
     (vifne posix)
     (vifne storage)
+    (vifne storage controller)
+    (vifne processor)
     (vifne message-queue))
 
-  (define number-processors)
+  (define (mmap-storage-file file size)
+    (let* ((fd (open file O_RDWR))
+           (p (mmap NULL size (+ PROT_READ PROT_WRITE) MAP_SHARED fd 0)))
+      (close fd)
+      p))
+
+  (define-syntax fork*
+    (syntax-rules ()
+      ((_ expr ...)
+       (let ((pid (fork)))
+         (if (zero? pid)
+           (begin expr ... (exit))
+           pid)))))
+
+  (define-syntax ignore-error
+    (syntax-rules ()
+      ((_ expr ...)
+       (guard (ex ((error? ex))) expr ...))))
 
   (define (start-emulator! storage-file init-file? num-procs)
-    (set! number-processors num-procs)
-    (apply storage-set! (mmap-storage-file storage-file))
-    (check-storage! init-file?)
-    (PID-set! (getpid))
-    ; The above must happen before child processes are forked.
-    )
-
-  (define (stop-emulator!)
-    (apply munmap (storage-get))
-  #;(for-each
-     destroy-message-queue
-     (cons "SMS"
-           (do ((i (- number-processors 1) (- i 1))
-                (l '() (cons (string-append "processor" (number->string i)) l)))
-               ((negative? i) l)))))
+    (let* ((size (file-size storage-file))
+           (addr (mmap-storage-file storage-file size)))
+      (storage-set! addr size init-file?)
+      (PID-set! (getpid))
+      ; The above must happen before the child processes are forked.
+      (let ((sc-pid (fork* (start-storage-controller num-procs)))
+            (sc-mq "storage-controller"))
+        (let loop ((n 0) (proc-pids '()) (proc-mqs '()))
+          (if (< n num-procs)
+            (loop (+ 1 n)
+                  (cons (fork* (start-processor n)) proc-pids)
+                  (cons (string-append "processor" (number->string n)) proc-mqs))
+            (begin
+              ; TODO?: Setup the text input device stuff?
+              ; Return the procedure that stops the emulator.
+              (lambda ()
+                (for-each (lambda (c) (ignore-error (kill c SIGTERM)))
+                          (cons sc-pid proc-pids))
+                (for-each (lambda (mq) (ignore-error (destroy-message-queue mq)))
+                          (cons sc-mq proc-mqs))
+                (ignore-error (munmap addr size)))))))))
 
 )

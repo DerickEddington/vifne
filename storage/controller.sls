@@ -4,7 +4,7 @@
 
 ; This library is the shared memory system (SMS) controller.  The SMS services
 ; requests from (emulated) processors, using message queues to communicate.
-; This library must be used only after forking a process for the storage
+; This library must be used only after forking the process for the storage
 ; controller.
 
 (library (vifne storage controller)

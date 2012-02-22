@@ -58,7 +58,7 @@
 (define initialize-storage-file?  (arg "-i" (true-string) boolean? #F))
 
 
-(start-emulator! storage-file
-                 initialize-storage-file?
-                 number-processors)
+(define stop-emulator! (start-emulator! storage-file
+                                        initialize-storage-file?
+                                        number-processors))
 (stop-emulator!)

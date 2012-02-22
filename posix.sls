@@ -4,19 +4,30 @@
 
 (library (vifne posix)
   (export
-    mmap-storage-file
+    mmap
     munmap
+    open
+    close
+    file-size
     getpid
+    fork
+    sleep
+    kill
     malloc
     free
     error/errno
+    NULL
+    PROT_READ
+    PROT_WRITE
+    MAP_SHARED
     O_RDONLY
     O_WRONLY
+    O_RDWR
     O_CREAT
     O_EXCL
     S_IRUSR
     S_IWUSR
-    #| TODO: fork stuff ...|#)
+    SIGTERM)
   (import
     (rnrs base)
     (rnrs control)
@@ -34,6 +45,25 @@
 
 
   (define getpid (foreign ("getpid") signed-int))  ; returns pid_t
+
+
+  (define fork-raw (foreign ("fork") signed-int))  ; returns pid_t
+
+  (define (fork)
+    (let ((r (fork-raw)))
+      (when (negative? r) (error/errno 'fork))
+      r))
+
+
+  (define sleep (foreign ("sleep" unsigned-int)  ; unsigned  seconds
+                         unsigned-int))  ; returns unsigned
+
+
+  (define kill-raw (foreign ("kill" signed-int   ; pid_t  pid
+                                    signed-int)  ; int  sig
+                            signed-int))  ; returns int
+
+  (define (kill pid sig) (unless (zero? (kill-raw pid sig)) (error/errno 'kill pid sig)))
 
 
   (define malloc-raw (foreign ("malloc" unsigned-long)  ; size_t  size
@@ -89,22 +119,9 @@
        (open pathname flags 0))))
 
 
-  (define close-raw (foreign ("close" signed-int) signed-int))
+  (define close-raw (foreign ("close" signed-int)  ; int  fd
+                             signed-int))  ; returns int
 
   (define (close fd) (unless (zero? (close-raw fd)) (error/errno 'close fd)))
-
-
-  (define (open-storage-file file) (open file O_RDWR))
-
-  (define (mmap-storage-file file)
-    (let* ((fd (open-storage-file file))
-           (l (file-size file))
-           (p (mmap NULL l (+ PROT_READ PROT_WRITE) MAP_SHARED fd 0)))
-      (close fd)
-      (list p l)))
-
-  ;-----------------------------------------------------------------------------
-
-  ; TODO: fork stuff
 
 )
