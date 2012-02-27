@@ -4,70 +4,66 @@
 
 ; This library TODO
 
-; TODO: Describe the format of chunks and metadata in the storage file.
+; TODO: Describe the format of chunks and metadata.
 
 (library (vifne storage)
   (export
-    new-chunk
-    chunk=?
-    chunk-ref
-    chunk-set!
-    seal-chunk!
-    load-chunk
-    store-chunk!
-    alloc-id!
+    guard-tag
+    stream-head-tag
+    stream-tail-tag
+    tagged?
+    tags
+    id->ptr
+    ref-word
+    set-word!
+    ref-field
+    set-field!
+    alloc-chunk!
     incr-refcount!
     decr-refcount!
+    free-chunk!
+    load-chunk
+    store-chunk!
     storage-set!)
   (import
     (rnrs base)
     (rnrs control)
-    (rnrs records syntactic)
     (rnrs arithmetic bitwise)
     (vifne config)
     (vifne foreign))
 
   (define chunk&meta-size (* 2 chunk-size))
-  (define chunk-wsz (/ chunk-size id-size))
-  (define meta-wsz 3)
+  (define meta-wsz 4)
   (define reference-count-field (+ chunk-wsz 0))
-  (define pointer-flags-field   (+ chunk-wsz 1))
-  (define next-free-field       (+ chunk-wsz 2))
+  (define tags-field            (+ chunk-wsz 1))
+  (define tags-bsz 3)
+  (define guard-tag        0)
+  (define stream-head-tag  1)
+  (define stream-tail-tag  2)
+  (define pointer-flags-field   (+ chunk-wsz 2))
+  (define next-free-field       (+ chunk-wsz 3))
 
   (define ref-word  (case id-size ((8) pointer-ref-u64)))
   (define set-word! (case id-size ((8) pointer-set-u64!)))
 
-  ;-----------------------------------------------------------------------------
+  (define (ref-field c i)
+    (values (ref-word c i)
+            (bitwise-bit-set? (ref-word c pointer-flags-field) i)))
 
-  ; This record type represents a chunk in processor-local memory.  As such, it
-  ; contains information not stored in the main shared storage.
-  (define-record-type chunk
-    (fields id
-            fields
-            pointers?
-            (mutable mutable?)))
+  (define (set-field! c i v p?)
+    (let ((pfl (ref-word c pointer-flags-field)))
+      (let ((oldv (ref-word c i))
+            (oldp? (bitwise-bit-set? pfl i)))
+        (set-word! c i v)
+        (set-word! c pointer-flags-field (bitwise-copy-bit pfl i (if p? 1 0)))
+        (when p? (incr-refcount! v))
+        (when oldp? (decr-refcount! oldv)))))
 
-  (define (new-chunk id)
-    (make-chunk id (make-vector chunk-wsz 0) (make-vector chunk-wsz #F) #T))
+  (define (tagged? c bitpos) (bitwise-bit-set? (ref-word c tags-field) bitpos))
 
-  (define (chunk=? a b)
-    (and (=      (chunk-id a)        (chunk-id b))
-         (equal? (chunk-fields a)    (chunk-fields b))
-         (equal? (chunk-pointers? a) (chunk-pointers? b))
-         (eqv?   (chunk-mutable? a)  (chunk-mutable? b))))
+  (define (tags . bitsposs)
+    (apply bitwise-ior (map (lambda (bp) (bitwise-arithmetic-shift 1 bp)) bitsposs)))
 
-  (define (chunk-ref c i)
-    (values (vector-ref (chunk-fields c) i)
-            (vector-ref (chunk-pointers? c) i)))
-
-  (define (chunk-set! c i v p?)
-    (assert (chunk-mutable? c))
-    (vector-set! (chunk-fields c) i v)
-    (vector-set! (chunk-pointers? c) i p?))
-
-  (define (seal-chunk! c) (chunk-mutable?-set! c #F))
-
-  ;-----------------------------------------------------------------------------
 
   (define storage-addr)
   (define storage-size)
@@ -81,37 +77,9 @@
   (define (id->ptr id) (integer->pointer (+ storage-addr id)))
 
 
-  (define (load-chunk id)
-    ; Copy a chunk from shared storage.  The returned chunk is immutable
-    ; because it came from shared storage.
-    (let ((m (id->ptr id))
-          (c (new-chunk id)))
-      (let ((f (chunk-fields c))
-            (p (chunk-pointers? c))
-            (ptrs (ref-word m pointer-flags-field)))
-        (do ((i 0 (+ 1 i)))
-            ((= chunk-wsz i))
-          (vector-set! f i (ref-word m i))
-          (vector-set! p i (bitwise-bit-set? ptrs i)))
-        (seal-chunk! c)
-        c)))
-
-  (define (store-chunk! c)
-    ; Copy a chunk to shared storage.  The chunk must be mutable because
-    ; immutable chunks cannot be mutated.  The chunk becomes immutable because
-    ; it is now in shared storage.
-    (assert (chunk-mutable? c))
-    (let ((m (id->ptr (chunk-id c)))
-          (f (chunk-fields c))
-          (p (chunk-pointers? c)))
-      (define (ptr? i) (if (vector-ref p i) 1 0))
-      (do ((i 0 (+ 1 i))
-           (ptrs 0 (bitwise-copy-bit ptrs i (ptr? i))))
-          ((= chunk-wsz i) (set-word! m pointer-flags-field ptrs))
-        (set-word! m i (vector-ref f i)))
-      (seal-chunk! c)))
-
-  ;-----------------------------------------------------------------------------
+  ; TODO?: Should the control chunk use its meta chunk like a normal chunk?
+  ; I.e. set its ref-count to 1, guard tagged, pointer flags used, next-free
+  ; ignored.  This might be useful for future use of the control chunk?
 
   (define control-struct)  ; Set by storage-set! above.
   (define control-struct-size (* 1 chunk&meta-size))
@@ -132,25 +100,35 @@
         (die "uninitialized storage"))))
 
 
-  (define (alloc-id!)
-    (let ((id (free-list)))
-      (and (< id storage-size)
-           (let* ((m (id->ptr id))
-                  (next (ref-word m next-free-field)))
-             ; Null next means the following chunk is the next.
-             (free-list-set! (if (positive? next) next (+ id chunk&meta-size)))
-             (set-word! m reference-count-field 1)
-             #;(set-word! m pointer-flags-field 0)
-             #;(set-word! m next-free-field 0)
-             id))))
+  ; TODO?: Should the default reference count be 1?  Either way, it seems some
+  ; situations must be careful to adjust ref-counts or not, based on the default
+  ; a chunk was allocated having.  What's the best default?
 
-  (define (free-id! id)
+  (define alloc-chunk!
+    (case-lambda
+      ((tags refc)
+       (let ((id (free-list)))
+         (and (< id storage-size)
+              (let* ((m (id->ptr id))
+                     (next (ref-word m next-free-field)))
+                ; Null next means the following chunk is the next (this
+                ; semantics supports sparse files).
+                (free-list-set! (if (positive? next) next (+ id chunk&meta-size)))
+                (set-word! m reference-count-field refc)
+                (set-word! m tags-field tags)
+                (set-word! m pointer-flags-field 0)
+                #;(set-word! m next-free-field 0)
+                id))))
+      ((tags) (alloc-chunk! tags 1))
+      (() (alloc-chunk! 0 1))))
+
+  (define (free-chunk! id)
     (let ((m (id->ptr id)))
-      #;(set-word! m reference-count-field 0)
+      (set-word! m reference-count-field 0)
+      #;(set-word! m tags-field 0)
       #;(set-word! m pointer-flags-field 0)
-      (set-word! m next-free-field (free-list))
-      (free-list-set! id)))
-
+      (set-word! m next-free-field (free-list)))
+    (free-list-set! id))
 
   (define (adjust-refcount! n p)
     (let ((c (+ n (ref-word p reference-count-field))))
@@ -167,8 +145,33 @@
           (do ((i 0 (+ 1 i)))
               ((= chunk-wsz i))
             (when (bitwise-bit-set? ptrs i) (decr-refcount! (ref-word m i)))))
-        (free-id! id))
+        (free-chunk! id))
       c))
+
+
+  (define (load-chunk id)
+    ; Copy a chunk from shared storage.  Disallow if the chunk is guard tagged.
+    (let ((m (id->ptr id)))
+      (and (not (tagged? m guard-tag))
+           (let ((ptrs (ref-word m pointer-flags-field))
+                 (f (make-vector chunk-wsz))
+                 (p (make-vector chunk-wsz)))
+             (do ((i 0 (+ 1 i)))
+                 ((= chunk-wsz i))
+               (vector-set! f i (ref-word m i))
+               (vector-set! p i (bitwise-bit-set? ptrs i)))
+             (list f p)))))
+
+  (define (store-chunk! id f p)
+    ; Copy a chunk to shared storage.  Assume the chunk is not guard tagged,
+    ; because the processors immediately seal pointers to guard chunks.
+    (define (ptr? i) (if (vector-ref p i) 1 0))
+    (let ((m (id->ptr id)))
+      (assert (not (tagged? m guard-tag)))
+      (do ((i 0 (+ 1 i))
+           (ptrs 0 (bitwise-copy-bit ptrs i (ptr? i))))
+          ((= chunk-wsz i) (set-word! m pointer-flags-field ptrs))
+        (set-word! m i (vector-ref f i)))))
 
   ;-----------------------------------------------------------------------------
 
@@ -181,5 +184,7 @@
   (assert (<= chunk-wsz (* 8 id-size)))
   ; The control-struct size must be a multiple of the chunk&meta size.
   (assert (exact-non-negative-integer? (/ control-struct-size chunk&meta-size)))
+  ; The word size must have enough bits for the tags field.
+  (assert (<= tags-bsz (* 8 id-size)))
 
 )

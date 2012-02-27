@@ -1,0 +1,64 @@
+How does a Fresh Breeze computer start?
+
+The processors must know where to find the first thing they should execute.
+
+I want to leave this flexible so that different ideas can be explored.
+
+? Something like a Master Boot Record at a fixed location?
+
+? Instead of implicit orthogonal persistence, have explicit persistence such
+  that all the processors are told to stop and store their execution so they can
+  resume when the computer is next started.  I think this requires some
+  interrupt ability to tell each processor.
+
+? Maybe the Deferred Task Queue could be both the "master boot record" and the
+  location where processors store their resume-state.  The DTQ is already
+  designed to be concurrently accessed (but I'm not sure how) and to be in the
+  persistent shared storage.  When the computer starts, the processors each take
+  a task from the DTQ.  When the computer stops, the processors each put their
+  frozen tasks in the DTQ.  I think this design also does not require that the
+  number of processors be the same across stops/starts.
+
+- The DTQ is used by multiple concurrent processors - how to have safe access?
+  Don't want to use direct memory access because that involves
+  memory-model-ordering issues which requires atomic instructions and tricky
+  algorithms.  So will have a single-threaded process access the DTQ as
+  requested over message queue.  Should it be the storage controller, or an
+  additional process?
+
+- The merge-streams (already planned) are queues whose access is managed by the
+  storage controller, so maybe using one as the DTQ is good?  A normal
+  merge-stream has multiple writers but only one reader, but the DTQ must have
+  multiple readers and multiple writers.  I think making a special multi-reader
+  merge-stream would work, because stream access must already be managed by the
+  single-threaded storage controller, to serialize mutation of the stream data
+  structure under concurrent writing and reading; i.e. a normal stream could
+  have multiple writers and one reader simultaneously wanting to update the
+  stream, which requires the SMS to arbitrate to maintain data structure
+  consistency.
+
+? Hmm, with queue/stream new elements are added at the end, but when stoping the
+  computer, the tasks active in the processors should be what's resumed when the
+  computer starts, but with a queue, they won't be because they'll be at the end
+  of the queue and other elements (tasks) will be taken from the front first.
+  Either the DTQ must be a deque, which might have undesirable consequences for
+  the stream implementation, or the DTQ must be a special thing with special
+  message types between the storage controller. - Need to think about the
+  implications regarding maintaining the semantics of the real Fresh Breeze
+  design.
+
+? Or, instead of using the DTQ for capturing the tasks to resume, have a
+  separate stream.  This avoids the problem with elements being added at the
+  end, because the separate stream will only have elements that are tasks to
+  resume, and so when the computer starts the processors will take elements that
+  all are tasks that were running when the computer stopped.
+
+? Or, instead of having all the processors get their starting task from some
+shared data structure, have only processor-0 get the data structure, and
+processor-0 will populate its Pending Task Queue (and maybe the DTQ as well)
+with the to-resume tasks, and the existing mechanism whereby processors steal
+work from others' PTQs will be what starts the other processors running.  This
+way, concurrent reading of the tasks-to-resume data structure doesn't happen,
+which means that normal merge-stream can be used for this data struct because
+that allows multiple writers (for when the processors stops) but only a single
+reader (processor-0 when the computer starts).

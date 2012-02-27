@@ -1,0 +1,37 @@
+There must be two handles, one for the head for reading/removing, and one for
+the tail for writing/adding.  Such a handle must be a chunk, of course.  Both
+these handle chunks are continually mutable, so accessing them must be managed
+by the storage controller (to serialize access) and they must not be copyable
+out of the shared storage (to avoid problems with consistency of cached
+copies).  So, both the head and tail handles must be "guard" chunks.
+
+Guard chunks must have metadata that marks them as guard type, so the storage
+controller knows to disallow normal access to them.
+
+? Actually, two distinct types, one for head one for tail, to prevent wrong
+operations?
+
+? Don't need to make stream element chunks have a type that disallows
+copying-out of SMS, if such chunks are entirely managed by the SMS, references
+to them will never be given to anything else, and so nothing will be able to
+request access to them.  But why not make them guard type anyway.
+
+
+H  T    H   T    H     T      H       T
+         \ /      \   /       |       |
+          E        E-E        E-E-...-E
+
+A head must have a reference to the tail, so that the tail can be updated when
+there's only one element and it's removed.  The tail must have a reference to
+the head, so that the head can be updated when there was no element and one is
+added.  However, this makes a reference cycle that causes GC problems!
+
+So, to still have distinct head and tail handles (important for capability
+security), the stream data type will be: head and tail element chunk references
+and indexes in the same chunk, and special tagged head and tail handles.  These
+head/tail handle chunks must also be guard tagged to prevent reading the
+pointers to the stream chunk.
+
+Both head and tail must have a field for the index into the current head(tail)
+chunk of elements, in addition to a field for the reference to that chunk.  The
+purpose is to make compact use of chunk space.

@@ -14,7 +14,8 @@
     (rnrs exceptions)
     (rnrs conditions)
     (vifne posix)
-    (vifne message-queue))
+    (vifne message-queue)
+    (vifne processor cache))
 
   (define sid)
   (define storage)

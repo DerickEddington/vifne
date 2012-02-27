@@ -246,7 +246,7 @@ Instruction Set:
 
 - ChunkSeal : Make a chunk immutable.
 
-- ChunkGet : Get fields of a mutable chunk.
+- ChunkGet : Get fields of a chunk.
 
 "The Fresh Breeze instruction set facilitates the creation and use of chunks. A
 ChunkCreate instruction allocates a new chunk returning its UID. New chunks are
@@ -353,6 +353,11 @@ executed by independent activities on any processing chips can be processed by
 the SMS component in immediate succession; the rate at which transactions can be
 processed may be as fast as the SMS unit can process successive swap
 instructions, and is not limited by the speed of any of the MTPs."
+- This means that guard access is serialized to avoid concurrent conflicts,
+which means my emulation can take advantage of such serializing because the
+observable semantics (serialized access via message passing with the storage
+manager) are the same as the real FB design even if the underlying mechanisms
+differ from the real FB design.
 
 "In essence, the guard holds a reference to the tail element of the (ordered)
 stream of transaction requests. An activity wishing to enter a transaction
@@ -374,6 +379,33 @@ tail).  Otherwise, if the sentence is correct, then the chain of links goes from
 tail to head, which means to get the head the entire chain must be traversed.
 Hmm, maybe I'm not understanding that the sentence is correct and somehow it
 works correctly?
+
+? What about when a thread removes the last element of a stream?  The guard must
+be updated to not point at the last element.  This means there is concurrent
+desire to access the guard by both the reader and writer threads, which means
+the access must be serialized thru the storage controller, which means removing
+a stream element must be performed by the storage controller.
+
+? When there is a task waiting for an element to be put in a stream, when an
+element is put in the stream, the waiting task must be just a reference to a
+procedure, because the procedure must be able to be dispatched to any processor,
+because the waiting task cannot be kept in the Active Task List of a processor
+because it may have to wait a long time and this could waste/consume the ATL.
+So, when a procedure does a "stream remove" operation, it must provide a pointer
+to a procedure to run when the element is removed.
+
+? When an element is put in a stream and there is a task waiting for an element,
+the storage controller must somehow cause the dispatching of the waiting task,
+because the storage controller does the adding of stream elements.  How does the
+storage controller do that?  Maybe it could add the task to the Deferred Task
+Queue, but that seems unfair because it might be a long time until it's
+executed, and the waiting task wanted the stream element before any of the
+currently executing tasks, so it would seem more fair to cause the waiting task
+to execute ASAP... but how? - Maybe if streams can also be deques, so such
+waiting tasks can be put at the front.  Actually, I wonder if using the DTQ
+isn't a good idea, because the processors might not take anything from the DTQ
+for a long while because the processor is kept busy from its Active and Pending
+tasks lists?
 
 
 - EnterRequest :

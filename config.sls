@@ -9,6 +9,7 @@
   (export
     chunk-size
     id-size
+    chunk-wsz
     default-storage-file)
   (import
     (rnrs base))
@@ -19,6 +20,8 @@
   (define default-storage-file "shared-chunk-storage")
 
   ;-----------------------------------------------------------------------------
+  
+  (define chunk-wsz (/ chunk-size id-size))
 
   (define (exact-non-negative-integer? x) (and (integer? x) (exact? x) (not (negative? x))))
 

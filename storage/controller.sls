@@ -13,8 +13,9 @@
   (import
     (rnrs base)
     (rnrs control)
+    (vifne message-queue)
     (vifne storage)
-    (vifne message-queue))
+    (vifne storage stream))
 
   (define (start-storage-controller num-procs)
     (set! requests (create-message-queue "storage-controller"))
@@ -25,29 +26,51 @@
   (define processors)
 
   (define (register-proc-mq! mq)
-    (let ((i (do ((i 0 (+ 1 i))) ((not (vector-ref processors i)) i))))
-      (vector-set! processors i mq)
-      i))
+    (do ((i 0 (+ 1 i)))
+        ((not (vector-ref processors i))
+         (vector-set! processors i mq)
+         i)))
 
   (define (proc-mq i) (vector-ref processors i))
 
+
   (define (controller-loop)
     (let ((req (receive requests)))
+
+      (define (reply x) (send (proc-mq (cadr req)) x))
+
       (case (car req)
-        ((allocate)
-         (let loop ((count (cadr req)) (a '()))
-           (define (done) (send (proc-mq (caddr req)) `(chunk-ids . ,a)))
-           (if (positive? count)
-             (let ((id (alloc-id!)))
-               (if id (loop (- count 1) (cons id a)) (done)))
-             (done))))
-        ((increment)
-         (for-each incr-refcount! (cdr req)))
-        ((decrement)
-         (for-each decr-refcount! (cdr req)))
+
         ((processor)
          (let ((mq (open-message-queue (cadr req))))
-           (send mq `(processor-id ,(register-proc-mq! mq)))))))
+           (send mq `(processor-id ,(register-proc-mq! mq)))))
+
+        ((allocate)
+         (let loop ((count (caddr req)) (a '()))
+           (define (done) (reply (if (pair? a) `(chunk-ids . ,a) 'storage-full)))
+           (if (positive? count)
+             (let ((id (alloc-chunk!)))
+               (if id (loop (- count 1) (cons id a)) (done)))
+             (done))))
+
+        ((increment)
+         (for-each incr-refcount! (cdr req)))
+
+        ((decrement)
+         (for-each decr-refcount! (cdr req)))
+
+        ((allocate-stream)
+         (let ((h&t (alloc-stream!)))
+           (reply (if h&t `(stream-handles . ,h&t) 'storage-full))))
+
+        ((stream-put)
+         (let ((x (apply stream-put! (cddr req))))
+           (reply (if (symbol? x) x `(notify ,x)))))
+
+        ((stream-get)
+         (let ((x (apply stream-get! (cddr req))))
+           (reply (if (symbol? x) x `(stream-element . ,x)))))))
+
     (controller-loop))
 
 )
