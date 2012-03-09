@@ -14,8 +14,6 @@
 
 (define (string-non-empty? x) (positive? (string-length x)))
 
-(define (exact-non-negative-integer? x) (and (integer? x) (exact? x) (not (negative? x))))
-
 (define (die msg . a) (apply error (car (command-line)) msg a))
 
 
@@ -50,7 +48,7 @@
 (define storage-file       (arg "-f" () string-non-empty?
                                 default-storage-file))
 
-(define number-processors  (arg "-n" (string->number) exact-non-negative-integer?
+(define number-processors  (arg "-n" (string->number) exact-positive-integer?
                                 (number-host-processors)))
 
 (define (true-string s) (string=? "true" s))

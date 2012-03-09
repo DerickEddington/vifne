@@ -1,0 +1,204 @@
+I believe the instruction design should support immediate references to chunk
+IDs.  This allows having closures that can be executed the same as non-closures:
+by simply executing instructions at a given address.  It also allows
+compiling-in references to library procedures; otherwise I think a huge unwieldy
+amount of library-table handles and indexing into such would be required.  In a
+real machine (i.e. not an emulator), such immediate chunk references should be
+safely possible because chunks already distinguish fields that are pointers, and
+the instruction-processing should be able to deal with identifying that
+distinction in instruction chunks, and all the usual safety aspects of sealing,
+immutability, and share-ability hold.
+
+- Take from MMIX where desirable and compatible.
+
+
+Instruction Set:
+
+- Based on 64-bit words.  Smallest instruction size is 8 bytes.  Every
+  instruction starts with a 16-bit operation code and is followed by 48 bits for
+  operands often divided into 3 16-bit operands.
+
+- Up to 65536 general purpose registers, numbered from 0, named r<hex-digits>.
+  A register number fits in 16 bits.  Each register belongs to a group of 16
+  registers, and there are up to 4096 groups, numbered from 0, and a group
+  consists of the 16 registers whose number is in the range [16g, 16g+16) where
+  g is the group number; this is also the high-order (left-most) hexadecimal
+  digits of a register name.  Register groups are used for bulk loading and
+  storing from/to chunks.  If a register number is used that is greater than the
+  maximum supported by a processor, the TODO exception occurs.
+
+
+- chunk-get : (opcode, group, selection, chunk)
+
+    opcode: is the unique 16-bit code for the operation;
+
+    group: is a 16-bit register number, but only the high 12 bits are used to
+    indicate a register group number (this allows specifying a group using any
+    of the registers that belong to the group, which seems useful).  With 256
+    registers and 16 groups, the high 8 bits are unneeded and also ignored,
+    making only bits 4 to 7 (inclusive) meaningful.
+
+    selection: is a 16-bit bit-field that specifies what registers of the group
+    are assigned and what words of the chunk are loaded.  Each bit position in
+    the bit-field corresponds to a register of the group and to a word index of
+    the chunk, such that bit position 0 corresponds to register rG0 and chunk
+    word 0, position 1 to rG1 and word 1, ..., position 15 to rGF and word 15.
+    This operation supports bulk loading from chunks, limited to only the
+    registers/words desired.  Each assigned register is tagged as a pointer or
+    non-pointer according to the tag from the corresponding chunk word.  If an
+    assigned register is tagged as a pointer, it is also tagged as a
+    pointer-to-immutable, because pointers-to-mutable cannot possibly be in a
+    chunk.
+
+    chunk: is a 16-bit register number indicating a register whose value is a
+    pointer to the chunk to load from.  The register may be one that is also
+    assigned by the operation.  The register must be tagged as a pointer, else
+    the TODO exception occurs.  The register may be tagged as either
+    pointer-to-mutable or -immutable.
+
+
+- chunk-set! : (opcode, chunk, selection, group)
+
+    opcode: is the unique 16-bit code for the operation;
+
+    chunk: is a 16-bit register number indicating a register whose value is a
+    pointer to the chunk to store to.  The register must not be one that is also
+    read by the operation, to prevent reference cycles, else the TODO exception
+    occurs.  The register must be tagged as a pointer, else the TODO exception
+    occurs.  The register must also be tagged as a pointer-to-mutable, else the
+    TODO exception occurs.
+
+    selection: is a 16-bit bit-field that specifies what registers of the group
+    are read and what words of the chunk are assigned.  This operation supports
+    bulk storing to chunks, limited to only the registers/words desired.  Each
+    assigned word is tagged as a pointer or non-pointer according to the tag
+    from the corresponding register.  If a selected register is tagged as a
+    pointer, it must also be tagged as a pointer-to-immutable, to prevent
+    reference cycles, else the TODO exception occurs.  (As a consequence, if the
+    register given as the chunk operand is also given by the selection and group
+    operands, the same-TODO exception occurs.)
+
+    group: is a 16-bit register number, but only the high 12 bits are used to
+    indicate a register group number.
+
+
+- set-multiple-immediates : (opcode, group, selection, ignored) (value) ...
+
+    opcode: is the unique 16-bit code for the operation;
+
+    group: is a 16-bit register number, but only the high 12 bits are used to
+    indicate a register group number.
+
+    selection: is a 16-bit bit-field that specifies what registers of the group
+    are assigned and how many 64-bit immediate values follow the instruction
+    word.  This operation supports bulk assignment of immediate values to
+    registers, including "hard-coded" pointers (which is useful for compiling
+    procedures to link to other data or procedures).  Each assigned register is
+    tagged as a pointer or non-pointer according to the tag from the
+    corresponding word of the instruction chunk(s) containing the immediate
+    values (this is consistent with capability-based security).  If an assigned
+    register is tagged as a pointer, it is also tagged as a
+    pointer-to-immutable, because pointers-to-mutable cannot possibly be in a
+    chunk.
+
+    The third operand is ignored.
+
+    The number of bits set in the selection operand specifies the number of
+    words expected to follow this instruction in the instruction sequence that
+    contain the immediate values.  The first following word is assigned to the
+    register corresponding to the lowest-order selection bit, the second word to
+    the register of the 2nd-lowest bit, and so on.  If there are not enough
+    words remaining in the instruction sequence, the TODO exception occurs.
+
+
+- set-immediate : (opcode, register, value)
+
+    opcode: is the unique 16-bit code for the operation;
+
+    register: is a 16-bit register number indicating a register to be assigned
+    from the immediate value.  The low 32-bits of the register are set, and the
+    other bits are set to zero.  The register is tagged as a non-pointer.
+
+    value: is a 32-bit value to set in the lower-order bits of the indicated
+    register.
+
+
+? sign-extend : (opcode, destination, source, position)
+
+    opcode: is the unique 16-bit code for the operation;
+
+    destination: is a 16-bit register number indicating a register to be
+    set to the result of sign-extending source from bit position.
+
+    source: is a 16-bit register number indicating a register whose value is to
+    be sign-extended.
+
+    position: is a 16-bit number, but only the low 5 bits are used, that
+    indicates the bit position of source that is taken as the sign bit that is
+    used to set all the bits in destination higher than position.
+
+
+
+
+? How to do jumps and branches?  Relative jumps seem challenging because
+instruction sequences must be represented somehow using chunks.  If it's done
+with linked-list of chunks, then backwards jumps require backwards links or
+caching all previous chunks of the sequence, and forward jumps require following
+links forward - all this is unattractive because the complexity is linear.  If
+it's done with tree-array of chunks, backwards and forwards jumps require
+tree-array indexing, which is logarithmic, and an instruction-sequence register
+is required that points to the head of the tree-array of instructions, and
+tree-array operations support must be built-in the processors (which seems
+alright because the processors probably should have such operations as user
+instructions).
+
+? Some jump instructions could take two operands that are registers, one is a
+pointer to the procedure/code-segment/instruction-sequence/tree-array, and the
+other is the index of the target instruction in the segment/sequence.  Relative
+jumps could be done by specifying the current code segment register as the
+code-segment register, and the desired target as the other operand.  Because
+instruction indexes are always relative to a code-segment, an assembler/compiler
+can just as easily compute the target offset from the beginning as it could from
+the current instruction.  Thus, the same instruction supports both cross- and
+intra-segment jumping.
+
+
+? Maybe there should be a reserved set of private registers used to keep a
+"pointer trail" for the current instruction-sequence tree-array to acheive
+asymptotic sequential access.  This might also help with relative jumping - from
+the offset the degree of tree travel can be known and thus what pointer-trail
+registers to use.  16 such registers would support a depth of 16 which supports
+a huge array size.  8 registers would probably be enough.
+? Does jumping to a different code segment require flushing these pointer
+trail registers so they can be used for the new segment?
+- I think the root register of the pointer trail registers should be the same
+register as the current code-segment register.  If this register is set, should
+the other trail registers be automatically zeroed/flushed?
+
+
+
+
+
+
+
+
+
+
+
+[Old, abandoned]
+
+Maybe, an instruction sequence (e.g. a procedure or just a fragment) is
+represented as a chain of chunks containing a UTF-8 string of Scheme datums that
+are symbolic machine code.  Such a chunks-chain-string must specify its length.
+
+C0(<len>,<word-bytes>,...,<next>)
+Cn(<word-bytes>,...,<next>)
+
+Maybe, the Instruction Access Unit will cache instruction sequences as vectors of
+instruction datums.  This differs from the real FB design, in that the access
+unit caches chunks and has a fixed limit of chunks, but from programs'
+perspective, semantically I think the difference isn't noticeable.
+
+Maybe, the Instruction Association Unit will map chunk IDs of instruction
+sequences to locations in the I.Access.U.
+

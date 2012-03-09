@@ -24,7 +24,11 @@
     free-chunk!
     load-chunk
     store-chunk!
-    storage-set!)
+    storage-set!
+    startup-tasks-head
+    startup-tasks-tail
+    #|deferred-tasks-head
+    deferred-tasks-tail|#)
   (import
     (rnrs base)
     (rnrs control)
@@ -43,8 +47,8 @@
   (define pointer-flags-field   (+ chunk-wsz 2))
   (define next-free-field       (+ chunk-wsz 3))
 
-  (define ref-word  (case id-size ((8) pointer-ref-u64)))
-  (define set-word! (case id-size ((8) pointer-set-u64!)))
+  (define ref-word  (case word-size ((8) pointer-ref-u64)))
+  (define set-word! (case word-size ((8) pointer-set-u64!)))
 
   (define (ref-field c i)
     (values (ref-word c i)
@@ -68,11 +72,13 @@
   (define storage-addr)
   (define storage-size)
 
-  (define (storage-set! addr size init?)
+  (define (storage-set! addr size init? alloc-stream!)
     (set! storage-addr (pointer->integer addr))
     (set! storage-size size)
     (set! control-struct addr)
-    (check-storage! init?))
+    ; (Passing alloc-stream! is necessary because it can't be imported from
+    ; (vifne storage stream) because circular imports aren't possible.)
+    (check-storage! init? alloc-stream!))
 
   (define (id->ptr id) (integer->pointer (+ storage-addr id)))
 
@@ -83,12 +89,22 @@
 
   (define control-struct)  ; Set by storage-set! above.
   (define control-struct-size (* 1 chunk&meta-size))
-  (define free-list-field 0)
+  (define control-struct-wsz 5)
+  (define free-list-field           0)
+  (define startup-tasks-head-field  1)
+  (define startup-tasks-tail-field  2)
+  (define deferred-tasks-head-field 3)
+  (define deferred-tasks-tail-field 4)
 
   (define (free-list) (ref-word control-struct free-list-field))
   (define (free-list-set! id) (set-word! control-struct free-list-field id))
 
-  (define (check-storage! init?)
+  (define (startup-tasks-head) (ref-word control-struct startup-tasks-head-field))
+  (define (startup-tasks-tail) (ref-word control-struct startup-tasks-tail-field))
+  #|(define (deferred-tasks-head) (ref-word control-struct deferred-tasks-head-field))
+  (define (deferred-tasks-tail) (ref-word control-struct deferred-tasks-tail-field))|#
+
+  (define (check-storage! init? alloc-stream!)
     (define (die msg) (error 'check-storage! msg))
     (if (positive? (free-list))
       (when init? (die "already initialized"))
@@ -96,7 +112,14 @@
         ; Initialize the storage.  Should be done only once per file.  The
         ; storage should be all zeros.  Make the chunk following the control
         ; struct be the first free chunk.
-        (free-list-set! control-struct-size)
+        (begin (free-list-set! control-struct-size)
+               (let ((s-h&t (alloc-stream!))
+                     (d-h&t (alloc-stream!)))
+                 (assert (and s-h&t d-h&t))
+                 (set-word! control-struct startup-tasks-head-field (car s-h&t))
+                 (set-word! control-struct startup-tasks-tail-field (cadr s-h&t))
+                 #|(set-word! control-struct deferred-tasks-head-field (car d-h&t))
+                 (set-word! control-struct deferred-tasks-tail-field (cadr d-h&t))|#))
         (die "uninitialized storage"))))
 
 
@@ -175,16 +198,15 @@
 
   ;-----------------------------------------------------------------------------
 
-  (define (exact-non-negative-integer? x) (and (integer? x) (exact? x) (not (negative? x))))
-
-  (assert (exact-non-negative-integer? chunk-wsz))
   ; The chunk size must have enough words for the meta fields.
   (assert (<= meta-wsz chunk-wsz))
   ; The word size must have enough bits for each chunk-field's pointer?-flag.
-  (assert (<= chunk-wsz (* 8 id-size)))
-  ; The control-struct size must be a multiple of the chunk&meta size.
-  (assert (exact-non-negative-integer? (/ control-struct-size chunk&meta-size)))
+  (assert (<= chunk-wsz (* 8 word-size)))
   ; The word size must have enough bits for the tags field.
-  (assert (<= tags-bsz (* 8 id-size)))
+  (assert (<= tags-bsz (* 8 word-size)))
+  ; The control-struct size must be a multiple of the chunk&meta size.
+  (assert (zero? (mod control-struct-size chunk&meta-size)))
+  ; The control-struct size must have enough words for the needed fields.
+  (assert (<= (* word-size control-struct-wsz) control-struct-size))
 
 )

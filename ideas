@@ -228,6 +228,13 @@ Ideas:
 
 - "Processor registers will be tagged to flag those holding capabilities."
 
+- "registers also have an extra field that contains the slot location of the
+  chunk once access to it has been effected and the chunk is present in one of
+  the access units." - What about when the chunk is evicted from the unit, to
+  make room for fresher data, but a register's extra field still indicates the
+  chunk is in the unit?  Does the unit track what registers have set their extra
+  field, so these fields can be invalidated when the chunk is evicted?
+
 ? I think peripheral devices should be identified using chunk IDs, because this
 leverages their capability security and maintains only one type of
 ID/reference/capability throughout the system.

@@ -9,27 +9,32 @@
   (export
     chunk-size
     id-size
+    word-size
     chunk-wsz
-    default-storage-file)
+    default-storage-file
+    register-set-size
+    cache-size
+    exact-positive-integer?)
   (import
     (rnrs base))
 
   (define chunk-size 128)  ; 1024 bits
   (define id-size 8)       ; 64 bits
+  (define word-size id-size)
+  (define chunk-wsz (/ chunk-size word-size))
 
   (define default-storage-file "shared-chunk-storage")
 
+  (define register-set-size (* 16 chunk-wsz))
+  (define cache-size (expt 2 15))
+
   ;-----------------------------------------------------------------------------
-  
-  (define chunk-wsz (/ chunk-size id-size))
 
-  (define (exact-non-negative-integer? x) (and (integer? x) (exact? x) (not (negative? x))))
+  (define (exact-positive-integer? x) (and (integer? x) (exact? x) (positive? x)))
 
-  (assert (exact-non-negative-integer? chunk-size))
-  (assert (exact-non-negative-integer? (/ chunk-size 8)))
-  (assert (exact-non-negative-integer? id-size))
-  (assert (exact-non-negative-integer? (/ id-size 8)))
-  (assert (exact-non-negative-integer? (/ chunk-size id-size)))
+  (assert (exact-positive-integer? chunk-size))
+  (assert (exact-positive-integer? id-size))
+  (assert (exact-positive-integer? chunk-wsz))
   (assert (< id-size chunk-size))
 
 )

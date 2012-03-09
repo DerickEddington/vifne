@@ -14,6 +14,7 @@
     (rnrs conditions)
     (vifne posix)
     (vifne storage)
+    (vifne storage stream)
     (vifne storage controller)
     (vifne processor)
     (vifne message-queue))
@@ -40,7 +41,7 @@
   (define (start-emulator! storage-file init-file? num-procs)
     (let* ((size (file-size storage-file))
            (addr (mmap-storage-file storage-file size)))
-      (storage-set! addr size init-file?)
+      (storage-set! addr size init-file? alloc-stream!)
       (PID-set! (getpid))
       ; The above must happen before the child processes are forked.
       (let ((sc-pid (fork* (start-storage-controller num-procs)))
@@ -48,7 +49,8 @@
         (let loop ((n 0) (proc-pids '()) (proc-mqs '()))
           (if (< n num-procs)
             (loop (+ 1 n)
-                  (cons (fork* (start-processor n)) proc-pids)
+                  (cons (fork* (start-processor n (startup-tasks-head) (startup-tasks-tail)))
+                        proc-pids)
                   (cons (string-append "processor" (number->string n)) proc-mqs))
             (begin
               ; TODO?: Setup the text input device stuff?

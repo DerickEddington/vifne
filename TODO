@@ -14,3 +14,18 @@ than the processor processes, so it can keep up with the amount of requests.
 Does an Interprocessor Network need to exist, so the processors can communicate
 things such as supplying a join result to an activity on another processor?  If
 so, I suppose it should use Posix message queues.
+
+Should chunk access be through the storage controller?  Currently, it's via
+direct (foreign) memory access of the mmap'ed file.  Doing it through the
+controller is more like the actual FB design, which might be beneficial for
+future changes of the emulator.
+
+Explore making "random-access lists", the tree-based list representation of
+Okasaki with O(log) random-access and O(1) car, cdr, and cons.  See that SRFI.
+Such a representation might work great with chunks, maybe even further optimized
+for them, and would provide the basis for implementing Lisp languages.
+
+I think the storage file format currently is endianness-specific and so is not
+portable to different endianness machines.  Otherwise, I believe the storage
+file format is portable, and sharing storage files seems very desirable, so I
+should decide how to make the storage file format portable.
