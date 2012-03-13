@@ -59,14 +59,14 @@ Instruction Set:
 
 - chunk-set! : (opcode, chunk, selection, group)
 
+    TODO: Increment refcounts when setting pointers.
+
     opcode: is the unique 16-bit code for the operation;
 
     chunk: is a 16-bit register number indicating a register whose value is a
-    pointer to the chunk to store to.  The register must not be one that is also
-    read by the operation, to prevent reference cycles, else the TODO exception
-    occurs.  The register must be tagged as a pointer, else the TODO exception
-    occurs.  The register must also be tagged as a pointer-to-mutable, else the
-    TODO exception occurs.
+    pointer to the chunk to store to.  The register must be tagged as a pointer,
+    else the TODO exception occurs.  The register must also be tagged as a
+    pointer-to-mutable, else the TODO exception occurs.
 
     selection: is a 16-bit bit-field that specifies what registers of the group
     are read and what words of the chunk are assigned.  This operation supports
@@ -138,6 +138,20 @@ Instruction Set:
     used to set all the bits in destination higher than position.
 
 
+
+
+? Now I'm thinking that unsealed chunks should not be allowed, i.e. the values
+for the fields must be specified at chunk creation time.  Why are unsealed
+chunks needed?  They can only be kept in registers, because they can't be put in
+other chunks, which severely limits their usefulness because they can't even be
+preserved across procedure calls.  Are there any uses that can't be accomplished
+with set-all-fields-at-creation-time?  I think the only reason to allow multiple
+writes and then the sealing is to free registers by putting values in their
+chunk instead of holding them in registers, however register exhaustion is still
+always possible, and with many more registers like my emulator has, exhaustion
+seems quite unlikely.  Not supporting unsealed chunks also has the benefit of
+simplifying the processor because tracking and checking if registers are
+pointers to mutable or immutable is not needed.
 
 
 ? How to do jumps and branches?  Relative jumps seem challenging because

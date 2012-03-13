@@ -7,10 +7,10 @@
 (library (vifne processor cache)
   (export
     chunk-ref
-    #|new-chunk
-    chunk=?
     chunk-set!
-    seal-chunk!|#
+    #|new-chunk
+    chunk=?|#
+    seal-chunk!
     get-data-chunk
     get-inst-chunk)
   (import
@@ -76,6 +76,19 @@
     (seal-chunk! c))
 
 
+  ; TODO: There is a bug with the caching: mutable chunks can be arbitrarily
+  ; evicted from the cache, and this seals them and stores them in shared
+  ; storage.  This is wrong because a task might not be done mutating such a
+  ; chunk, but when that task gets its chance to continue, the chunk will be
+  ; loaded from shared storage and be immutable.  I think the solution is
+  ; either: 1) never evict mutable chunks, which potentially could exhaust and
+  ; waste cache space if tasks don't seal their chunks quickly enough; or 2)
+  ; allow mutable chunks to be stored and loaded, and implement a new metadata
+  ; that indicates if a chunk in storage is mutable, which I suspect is safe
+  ; because mutable chunks will still be prevented from being shared with
+  ; another potentially-concurrent task (right?); or 3) don't support mutable
+  ; chunks, i.e. chunks must be fully defined at allocation.
+
   ; TODO: When a processor is stopped, should all mutable chunks in the cache be
   ; stored in shared storage?  If not, they'll be lost.  I don't think the
   ; stopping algorithm can wait for a point where there are no mutable chunks in
@@ -83,6 +96,14 @@
   ; mutable chunks is allowed (per TODO comment in load-chunk), then mutable
   ; chunks should be stored (as mutable, which will require new support I
   ; think).
+
+  ; TODO: What if a chunk's refcount goes to zero and the chunk is freed, but
+  ; it's old now-invalid value is still in the cache?  I think it's possible
+  ; that its ID could be reallocated and then looked-up in the cache, which will
+  ; return the old invalid chunk.  I think the solution is to have a special
+  ; case for new chunks so they're stored in the cache without checking if their
+  ; ID is already in the cache, this way if their ID is in the cache (from an
+  ; old invalid) it's overwritten with the new valid.
 
 
   (define data-access-unit (make-vector cache-size #F))
@@ -148,6 +169,7 @@
   (define (get-inst-chunk id) (get-chunk id inst-access-unit inst-assoc-unit inst-lru))
 
 
-  ; TODO: Cache of new mutable chunks ready to be allocated.
+  ; TODO?: Cache of new mutable chunks ready to be allocated?  Will have to free
+  ; them when processor stops.
 
 )

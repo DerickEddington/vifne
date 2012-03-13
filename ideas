@@ -235,9 +235,48 @@ Ideas:
   chunk is in the unit?  Does the unit track what registers have set their extra
   field, so these fields can be invalidated when the chunk is evicted?
 
+- I think unsealed chunks must be disallowed from being passed as arguments to
+  any procedure, whether spawned or not, i.e. if there is means to call a
+  procedure without using spawn (an always-single-threaded never-parallel call)
+  then unsealed chunks cannot be passed through such a call.  This upholds the
+  secure arguments principle of modular programming.  Since arguments are passed
+  in a datastructure, the existing immutable-only rules prevent mutable chunks
+  from being passed in the datastructure.  However, the datastructure is passed
+  in a register, and this could be mutable, i.e. the top-level chunk of the
+  datastructure is still unsealed when set in the register and control is
+  transferred.  Unless unsealed chunks are impossible because chunks must be
+  fully defined at allocation.
+
+- I think there should not be a means to jump, i.e. transfer control without
+  doing a procedure call, to a different instruction segment / procedure, to
+  prevent the rules of procedure calling (e.g. no unsealed chunk passing) from
+  being violated.
+
+? What support should there be for always-single-threaded never-parallel
+  non-spawn procedure calling?  The Compiling Methods paper says there is such
+  support.  There are two aspects: making the call and returning from a call.
+  The instruction segment with instruction index must be saved and be used for
+  transferring control back when returning.  This requires supporting control
+  transfer to a positive index, i.e. not at the beginning, which contradicts the
+  above point about no means to jump.  Need to analyze the correctness/safety
+  issues I'm vaguely trying to protect and determine a clearer understanding of
+  to what extent malicious/erroneous procedures can violate other procedures,
+  e.g. by synthesizing a weird procedure return.
+
+- "There may also be instances where addresses of unsealed chunks will need to
+  remain in the registers before they can be stored in memory, and these
+  situations must be identified and handled efficiently." - I think this is
+  saying such registers need to be protected across procedure calls, because
+  their contents cannot be put in a saved-registers chunk because pointers to
+  unsealed chunks cannot be put in a chunk.  I don't see how this can work well
+  in general, because procedure A might have such a register and call B which
+  must know not to use that register and B might call C which might call ... and
+  these procedures cannot know what registers must not be used, which
+  unacceptably interferes with general modular composability.
+
 ? I think peripheral devices should be identified using chunk IDs, because this
-leverages their capability security and maintains only one type of
-ID/reference/capability throughout the system.
+  leverages their capability security and maintains only one type of
+  ID/reference/capability throughout the system.
 
 
 
@@ -333,6 +372,25 @@ access to this slot via the LDS register can be controled (and because the value
 of the LDS register cannot be transferred uncontrolled, the pointer to the LDS
 cannot end up in a register that would allow general access to a slot that is a
 join point).
+
+- The Compiling Methods paper says join tickets are passed in the datastructure
+  that is passed to procedures that contains the procedure arguments.  This
+  seems to imply that is the Local Data Segment.
+
+- "[For] a return from a spawned method call, the program includes a pointer to
+  [the return values] data structure in the join ticket. The join ticket is sent
+  to the hardware scheduler to wait for the master thread to finish." - I think
+  this means a copy of the join ticket can be given to EnterJoinResult, which is
+  good because mutation of the join ticket is not required.
+
+- It must not be possible to forge a join ticket!  A join ticket is a chunk
+  holding a reference to the LDS of the master and the index of the join point
+  in that LDS.  To prevent forging, only intended slave threads must have
+  pointer to master's LDS - is this possible?  Also, even with a legitimate
+  reference to the master's LDS, an index must not be forgeable, e.g. a spawned
+  slave maliciously/erroneously invokes EnterJoinResult with a join ticket with
+  the correct LDS but an incorrect index.  Is the only way to enforce this to
+  specially meta-tag join tickets to identify only those created properly?
 
 
 ???

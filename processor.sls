@@ -117,6 +117,7 @@
   (define (rp? n) (register-pointer? (r n)))
   (define (rp?-set! n v) (register-pointer?-set! (r n) v))
   (define (rm? n) (register-mutable? (r n)))
+  (define (rm?-set! n v) (register-mutable?-set! (r n) v))
 
   (define (sr n) (vector-ref special-register-set n))
   (define (srv n) (register-value (sr n)))
@@ -129,6 +130,15 @@
       (register-value-set! s (register-value x))
       (register-pointer?-set! s (register-pointer? x))
       (register-mutable?-set! s (register-mutable? x))))
+
+  (define (group-select reg sel)
+    (let ((group (bitwise-and #xFFF0 reg)))
+      (let loop ((i (- chunk-wsz 1)) (r '()) (n '()))
+        (if (negative? i)
+          (values r n)
+          (if (bitwise-bit-set? sel i)
+            (loop (- i 1) (cons (+ group i) r) (cons i n))
+            (loop (- i 1) r n))))))
 
 
   (define (array-ref head-id index get-chunk)
@@ -194,11 +204,66 @@
 
   (define-operations operations-table inst-word
 
+    (new-chunks
+     (let-values (((g _) (group-select (operand inst-word 0) (operand inst-word 1))))
+       ; TODO?: If in the future there's a cache of chunks for allocating, this
+       ; will change to use it, instead of communicating with the storage
+       ; controller here.
+       (send* `(allocate ,(length g)))
+       (let ((ids (receive*)))
+         (when (symbol? ids) (processor-exception ids))
+         (when (< (length ids) (length g))
+           (send* `(decrement . ,ids)) ; Free any that were allocated.
+           (processor-exception 'storage-full))
+         (for-each (lambda (r id) (rv-set! r id) (rp?-set! r #T) (rm?-set! r #T))
+                   g ids))))
+
+    (seal
+     (let-values (((g _) (group-select (operand inst-word 0) (operand inst-word 1))))
+       (for-each (lambda (r)
+                   (unless (rp? r) (processor-exception 'not-pointer))
+                   (seal-chunk! (get-data-chunk (rv r))))
+                 g)))
+
+    (chunk-get
+     (let ((r (operand inst-word 2)))
+       (unless (rp? r) (processor-exception 'not-pointer))
+       (let ((c (get-data-chunk (rv r))))
+         (let-values (((r i) (group-select (operand inst-word 0) (operand inst-word 1))))
+           (for-each (lambda (r i)
+                       (let-values (((v p?) (chunk-ref c i)))
+                         (rv-set! r v)
+                         (rp?-set! r p?)
+                         (rm?-set! r #F)))
+                     r i)))))
+
+    (chunk-set!
+     (let ((r (operand inst-word 0)))
+       (unless (rp? r) (processor-exception 'not-pointer))
+       (unless (rm? r) (processor-exception 'immutable))
+       (let ((c (get-data-chunk (rv r))))
+         (let-values (((r i) (group-select (operand inst-word 2) (operand inst-word 1))))
+           (for-each (lambda (r i)
+                       (when (and (rp? r) (rm? r)) (processor-exception 'mutable))
+                       (chunk-set! c i (rv r) (rp? r)))
+                     r i)))))
+
+    (set-multiple-immediates
+     TODO)
+
+    (set-immediate
+     (let ((r (operand inst-word 0)))
+       (rv-set! r (bitwise-bit-field inst-word 32 64))
+       (rp?-set! r #F)))
+
+    (sign-extend
+     TODO)
+
     (set-special
-     (sr-copy! (operand-ref inst-word 0) (operand-ref inst-word 1)))
+     (sr-copy! (operand inst-word 0) (operand inst-word 1)))
 
     #;(resume
-     (let ((retry (operand-ref inst-word 0)))
+     (let ((retry (operand inst-word 0)))
        (assert (srp? TS))
        (assert (not (srp? TI)))
        (srv-set! IS (srv TS))
@@ -207,11 +272,11 @@
            ; Retry the tripped instruction.
            (srv-set! II (- (srv TI) 1))
            ; Pretend operand-1 was the tripped instruction and "retry" that.
-           (operation (rv (operand-ref inst-word 1))))
+           (operation (rv (operand inst-word 1))))
          ; Execute the instruction following the tripped one.
          (srv-set! II (srv TI))))))
 
-  (define (operand-ref inst-word i)
+  (define (operand inst-word i)
     (assert (<= 0 i 2))
     (let ((i (* 16 (+ 1 i))))
       (bitwise-bit-field inst-word i (+ 16 i))))
