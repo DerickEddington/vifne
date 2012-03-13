@@ -54,10 +54,10 @@
              (done))))
 
         ((increment)
-         (for-each incr-refcount! (cdr req)))
+         (for-each incr-refcount! (cddr req)))
 
         ((decrement)
-         (for-each decr-refcount! (cdr req)))
+         (for-each decr-refcount! (cddr req)))
 
         ((allocate-stream)
          (let ((h&t (alloc-stream!)))
