@@ -1,0 +1,8 @@
+Vifne is an emulator of the Fresh Breeze computer architecture designed by Jack
+B. Dennis.  It is intended for exploring programming such a computer, and it
+does not emulate all aspects of a real hardware machine.  It does emulate
+... TODO.  It differs from the Fresh Breeze design, as described in the
+freely-available papers, in some ways ... TODO.  Vifne means fresh in the Lojban
+language and is pronounced TODO: international phonetic symbols.
+
+TODO: More about the file collection and how to use it.
