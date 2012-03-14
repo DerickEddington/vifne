@@ -5,6 +5,10 @@
 ; This library is the emulated processor.  This library must be used only after
 ; forking a process for a processor.
 
+; TODO?: Separate into libraries the stuff that's useful to other things like an
+; assembler, e.g. (vifne processor registers), (vifne processor operations), and
+; (vifne processor array).
+
 (library (vifne processor)
   (export
     start-processor)
@@ -16,11 +20,11 @@
     (rnrs conditions)
     (rnrs records syntactic)
     (rnrs arithmetic bitwise)
+    (rnrs hashtables)
     (vifne config)
     (vifne posix)
     (vifne message-queue)
-    (vifne processor cache)
-    (vifne processor exception))
+    (prefix (only (vifne storage) load-chunk store-chunk!) storage:))
 
   (define sid)
   (define storage)
@@ -67,18 +71,24 @@
                ; another processor's PTQ or from the global DTQ.
                ))))
 
+  ;-----------------------------------------------------------------------------
 
-  ; TODO?: Seperate into libraries the stuff that's useful to other things like
-  ; an assembler, e.g. (vifne processor registers), (vifne processor
-  ; operations), and (vifne processor array).
+  (define-condition-type &processor-exception &serious
+    make-processor-exception processor-exception?
+    (type processor-exception-type))
 
+  (define (processor-exception type) (raise (make-processor-exception type)))
 
-  (define-record-type register (fields (mutable value) (mutable pointer?) (mutable mutable?)))
+  ; TODO?: Define and export bindings for the exception types?
+
+  ;-----------------------------------------------------------------------------
+
+  (define-record-type register (fields (mutable value) (mutable pointer?)))
   (define-record-type special-register (parent register) (fields validator))
 
   (define register-set
     (do ((i register-set-size (- i 1))
-         (l '() (cons (make-register 0 #F #F) l)))
+         (l '() (cons (make-register 0 #F) l)))
         ((zero? i) (list->vector l))))
 
   #;(define (always-true _) #T)
@@ -88,7 +98,7 @@
       ((_ (+ . n) (vector regs ...) set (special validator) . r)
        (begin (define special (+ . n))
               (define-special-registers (+ 1 (+ . n))
-                (vector regs ... (make-special-register 0 #F #F validator))
+                (vector regs ... (make-special-register 0 #F validator))
                 set . r)))
       #;((_ (+ . n) (vector . v) s special . r)
          (define-special-registers (+ . n) (vector . v) s (special always-true) . r))
@@ -97,39 +107,41 @@
       ((_ . r)
        (define-special-registers (+ 0) (vector) . r))))
 
-  (define (pointer?-immutable? r) (and (register-pointer? r) (not (register-mutable? r))))
-  (define (non-pointer? r) (not (register-pointer? r)))
+  (define pointer? register-pointer?)
+  (define (non-pointer? r) (not (pointer? r)))
 
   ; TODO: The Trip Handler Table doesn't seem good.  Maybe trips aren't good.
   ; How to handle user-caused processor exceptions?
 
   (define-special-registers special-register-set
-    (IS     pointer?-immutable?)      ; Instruction Segment
+    (IS     pointer?)                 ; Instruction Segment
     (II     non-pointer?)             ; Instruction Index
-    #|(TH     pointer?-immutable?)      ; Trip Handler Table
-    (TS     pointer?-immutable?)      ; Trip Instruction Segment
+    #|(TH     pointer?)               ; Trip Handler Table
+    (TS     pointer?)                 ; Trip Instruction Segment
     (TI     non-pointer?)             ; Trip Instruction Index |#
     )
 
+  (define (set-register! r v p? incr?)
+    (let ((oldv (register-value r))
+          (oldp? (register-pointer? r)))
+      (register-value-set! r v)
+      (register-pointer?-set! r p?)
+      (when (and p? incr?) (send* `(increment ,v)))
+      (when oldp? (send* `(decrement ,oldv)))))
+
   (define (r n) (vector-ref register-set n))
   (define (rv n) (register-value (r n)))
-  (define (rv-set! n v) (register-value-set! (r n) v))
   (define (rp? n) (register-pointer? (r n)))
-  (define (rp?-set! n v) (register-pointer?-set! (r n) v))
-  (define (rm? n) (register-mutable? (r n)))
-  (define (rm?-set! n v) (register-mutable?-set! (r n) v))
+  (define (r-set! n v p? incr?) (set-register! (r n) v p? incr?))
 
   (define (sr n) (vector-ref special-register-set n))
   (define (srv n) (register-value (sr n)))
   (define (srp? n) (register-pointer? (sr n)))
-  (define (srm? n) (register-mutable? (sr n)))
   (define (sr-copy! s x)
     (let ((s (sr s)) (x (r x)))
       (unless ((special-register-validator s) x)
         (processor-exception 'invalid-special-register-value))
-      (register-value-set! s (register-value x))
-      (register-pointer?-set! s (register-pointer? x))
-      (register-mutable?-set! s (register-mutable? x))))
+      (set-register! s (register-value x) (register-pointer? x) #T)))
 
   (define (group-select reg sel)
     (let ((group (bitwise-and #xFFF0 reg)))
@@ -204,26 +216,31 @@
 
   (define-operations operations-table inst-word
 
-    (new-chunks
-     (let-values (((g _) (group-select (operand inst-word 0) (operand inst-word 1))))
-       ; TODO?: If in the future there's a cache of chunks for allocating, this
-       ; will change to use it, instead of communicating with the storage
-       ; controller here.
-       (send* `(allocate ,(length g)))
-       (let ((ids (receive*)))
-         (when (symbol? ids) (processor-exception ids))
-         (when (< (length ids) (length g))
-           (send* `(decrement . ,ids)) ; Free any that were allocated.
-           (processor-exception 'storage-full))
-         (for-each (lambda (r id) (rv-set! r id) (rp?-set! r #T) (rm?-set! r #T))
-                   g ids))))
-
-    (seal
-     (let-values (((g _) (group-select (operand inst-word 0) (operand inst-word 1))))
-       (for-each (lambda (r)
-                   (unless (rp? r) (processor-exception 'not-pointer))
-                   (seal-chunk! (get-data-chunk (rv r))))
-                 g)))
+    (chunk-create
+     ; TODO?: If in the future there's a cache of chunks for allocating, this
+     ; will change to use it, instead of communicating with the storage
+     ; controller here.
+     (send* '(allocate 1))
+     (let ((x (receive*)))
+       (when (symbol? x) (processor-exception x))
+       (let* ((id (cadr x))
+              (c (new-chunk id)))
+         (let-values (((r i) (group-select (operand inst-word 2) (operand inst-word 1))))
+           ; Set the fields of the chunk according to the register group
+           ; selection, and collect any pointers set in the fields.
+           (let ((incr (fold-left (lambda (a r i)
+                                    (chunk-set! c i (rv r) (rp? r))
+                                    (if (rp? r) (cons (rv r) a) a))
+                                  '() r i)))
+             ; Increment the reference counts of any chunks now referenced by
+             ; the fields of the chunk.
+             (unless (null? incr) (send* `(increment . ,incr)))))
+         ; Store the chunk in the shared storage at this point in case another
+         ; processor needs to access the chunk.
+         (store-chunk! c)
+         ; Set the specified register to point to the chunk, but don't increment
+         ; the reference count because the allocation already set it to 1.
+         (r-set! (operand inst-word 0) id #T #F))))
 
     (chunk-get
      (let ((r (operand inst-word 2)))
@@ -232,29 +249,14 @@
          (let-values (((r i) (group-select (operand inst-word 0) (operand inst-word 1))))
            (for-each (lambda (r i)
                        (let-values (((v p?) (chunk-ref c i)))
-                         (rv-set! r v)
-                         (rp?-set! r p?)
-                         (rm?-set! r #F)))
-                     r i)))))
-
-    (chunk-set!
-     (let ((r (operand inst-word 0)))
-       (unless (rp? r) (processor-exception 'not-pointer))
-       (unless (rm? r) (processor-exception 'immutable))
-       (let ((c (get-data-chunk (rv r))))
-         (let-values (((r i) (group-select (operand inst-word 2) (operand inst-word 1))))
-           (for-each (lambda (r i)
-                       (when (and (rp? r) (rm? r)) (processor-exception 'mutable))
-                       (chunk-set! c i (rv r) (rp? r)))
+                         (r-set! r v p? #T)))
                      r i)))))
 
     (set-multiple-immediates
      TODO)
 
     (set-immediate
-     (let ((r (operand inst-word 0)))
-       (rv-set! r (bitwise-bit-field inst-word 32 64))
-       (rp?-set! r #F)))
+     (r-set! (operand inst-word 0) (bitwise-bit-field inst-word 32 64) #F #F))
 
     (sign-extend
      TODO)
@@ -280,6 +282,105 @@
     (assert (<= 0 i 2))
     (let ((i (* 16 (+ 1 i))))
       (bitwise-bit-field inst-word i (+ 16 i))))
+
+  ;-----------------------------------------------------------------------------
+
+  ; This record type represents a chunk in processor-local memory.
+  (define-record-type chunk (fields id fields pointer-flags))
+
+  (define (new-chunk id)
+    (make-chunk id (make-vector chunk-wsz 0) (make-vector chunk-wsz #F)))
+
+  (define (chunk-ref c i)
+    (values (vector-ref (chunk-fields c) i)
+            (vector-ref (chunk-pointer-flags c) i)))
+
+  (define (chunk-set! c i v p?)
+    (vector-set! (chunk-fields c) i v)
+    (vector-set! (chunk-pointer-flags c) i p?))
+
+  (define (load-chunk id)
+    ; Copy a chunk from shared storage.
+    (let ((f&p (storage:load-chunk id)))
+      (if f&p (apply make-chunk id f&p) (processor-exception 'guarded))))
+
+  (define (store-chunk! c)
+    ; Copy a chunk to shared storage.
+    (storage:store-chunk! (chunk-id c) (chunk-fields c) (chunk-pointer-flags c)))
+
+  (define data-access-unit (make-vector cache-size #F))
+  (define inst-access-unit (make-vector cache-size #F))
+  (define data-assoc-unit (make-eqv-hashtable cache-size))
+  (define inst-assoc-unit (make-eqv-hashtable cache-size))
+
+  ; The Least-Recently-Used data structure is a mutable double-linked list of
+  ; nodes that represent cache locations, and a node lookup table indexed by
+  ; cache locations, and references to the current least- and most-recently-used
+  ; nodes.  The list is ordered from least- to most-recently-used.  An LRU is
+  ; updated when a cache location is accessed, such that the corresponding node
+  ; becomes the most-recently-used, and a new node may become the
+  ; least-recently-used.
+
+  (define-record-type LRU (fields table (mutable least) (mutable most)))
+  (define-record-type LRU-node (fields index (mutable prev) (mutable next)))
+
+  (define (new-LRU)
+    (let ((t (make-vector cache-size)))
+      (do ((i 0 (+ 1 i)))
+          ((<= cache-size i))
+        (let* ((prev (and (positive? i) (vector-ref t (- i 1))))
+               (n (make-LRU-node i prev #F)))
+          (vector-set! t i n)
+          (when prev (LRU-node-next-set! prev n))))
+      (make-LRU t 0 (vector-ref t (- (vector-length t) 1)))))
+
+  (define data-lru (new-LRU))
+  (define inst-lru (new-LRU))
+
+  (define (update-LRU! lru i)
+    ; Make a cache location's node be the most-recently-used in the LRU list.
+    ; Also possibly set a new least-recently-used location.
+    (let* ((i (vector-ref (LRU-table lru) i))
+           (n (LRU-node-next i)))
+      (when n
+        (let ((p (LRU-node-prev i)))
+          (if p
+            (LRU-node-next-set! p n)
+            (LRU-least-set! lru (LRU-node-index n)))
+          (LRU-node-prev-set! n p)
+          (let ((m (LRU-most lru)))
+            (LRU-node-prev-set! i m)
+            (LRU-node-next-set! i #F)
+            (LRU-node-next-set! m i)
+            (LRU-most-set! lru i))))))
+
+  (define (cache-chunk c cache table lru)
+    (let* ((i (LRU-least lru))
+           (old (vector-ref cache i)))
+      ; Reference counts must be incremented when chunks are cached, to prevent
+      ; IDs from being allocated if they're still in any processor's cache.
+      (send* `(increment ,(chunk-id c)))
+      (when old
+        (hashtable-delete! table (chunk-id old))
+        (send* `(decrement ,(chunk-id old))))
+      (vector-set! cache i c)
+      (hashtable-set! table (chunk-id c) i)
+      (update-LRU! lru i)))
+
+  (define (get-chunk id cache table lru)
+    (let ((i (hashtable-ref table id #F)))
+      (if i
+        (begin (update-LRU! lru i)
+               (vector-ref cache i))
+        (let ((c (load-chunk id)))
+          (cache-chunk c cache table lru)
+          c))))
+
+  (define (get-data-chunk id) (get-chunk id data-access-unit data-assoc-unit data-lru))
+  (define (get-inst-chunk id) (get-chunk id inst-access-unit inst-assoc-unit inst-lru))
+
+  ; TODO?: Cache of new chunks ready to be allocated?  Will have to free them
+  ; when processor stops.
 
   ;-----------------------------------------------------------------------------
 

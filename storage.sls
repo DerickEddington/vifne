@@ -114,8 +114,8 @@
         ; struct be the first free chunk.
         (begin (free-list-set! control-struct-size)
                (let ((s-h&t (alloc-stream!))
-                     (d-h&t (alloc-stream!)))
-                 (assert (and s-h&t d-h&t))
+                     #;(d-h&t (alloc-stream!)))
+                 (assert (and s-h&t #;d-h&t))
                  (set-word! control-struct startup-tasks-head-field (car s-h&t))
                  (set-word! control-struct startup-tasks-tail-field (cadr s-h&t))
                  #|(set-word! control-struct deferred-tasks-head-field (car d-h&t))
@@ -187,7 +187,7 @@
 
   (define (store-chunk! id f p)
     ; Copy a chunk to shared storage.  Assume the chunk is not guard tagged,
-    ; because the processors immediately seal pointers to guard chunks.
+    ; because TODO: remember why.
     (define (ptr? i) (if (vector-ref p i) 1 0))
     (let ((m (id->ptr id)))
       (assert (not (tagged? m guard-tag)))
