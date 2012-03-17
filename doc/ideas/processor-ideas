@@ -116,11 +116,11 @@ Instruction Set:
     opcode: is the unique 16-bit code for the operation;
 
     register: is a 16-bit register number indicating a register to be assigned
-    from the immediate value.  The low 32-bits of the register are set, and the
-    other bits are set to zero.  The register is tagged as a non-pointer.
+    from the immediate value.  The low 32 bits of the register are set from the
+    value operand, and the high 32 bits are each set equal to bit 31 (the sign
+    bit) of the value operand.  The register is tagged as a non-pointer.
 
-    value: is a 32-bit value to set in the lower-order bits of the indicated
-    register.
+    value: is a signed 32-bit value.
 
 
 ? sign-extend : (opcode, destination, source, position)
@@ -133,7 +133,7 @@ Instruction Set:
     source: is a 16-bit register number indicating a register whose value is to
     be sign-extended.
 
-    position: is a 16-bit number, but only the low 5 bits are used, that
+    position: is a 16-bit number, but only the low 6 bits are used, that
     indicates the bit position of source that is taken as the sign bit that is
     used to set all the bits in destination higher than position.
 

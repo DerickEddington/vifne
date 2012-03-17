@@ -1,0 +1,20 @@
+From outside:
+
+Assembler: Uses (vifne ---) libraries to compile assembly language to
+instruction-arrays.  Outputs file of serialized chunks.
+
+Linking: Maybe use symbol tables, such that a module says what symbols it needs,
+and the needed symbols can be manually defined based on knowledge of where those
+things are.
+
+Importing: Unserialize a serialized-chunks file.  Some other utility will be
+used to edit pointers in storage file to refer to the imported data as desired.
+
+Serialized Files: Array of chunks.  Chunk pointers refer to chunks' offsets in
+the file.  Offset 0 unused, to preserve null pointers.  Unserializing uses
+(vifne ---) libraries to access mmap'ed storage file and allocate chunks in it,
+and translates file-offset pointers to point to corresponding chunks in storage
+file.
+
+Assembly Language: A Scheme-textual-datum list of instructions translates to an
+instruction array.  Also need a data-definition language...

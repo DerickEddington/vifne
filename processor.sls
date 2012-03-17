@@ -9,6 +9,8 @@
 ; assembler, e.g. (vifne processor registers), (vifne processor operations), and
 ; (vifne processor array).
 
+; TODO: How to handle user-caused processor exceptions?
+
 (library (vifne processor)
   (export
     start-processor)
@@ -62,8 +64,10 @@
     (let ((x (receive*)))
       (if (list? x)
         (begin (assert (cadr x)) ; ptr? is true
-               (register-value-set! (sr IS) (car x))
-               (register-pointer?-set! (sr IS) #T)
+               ; Set the Instruction Segment register to point to the
+               ; instruction segment gotten from the stream, but don't increment
+               ; the reference count because stream-get already incremented it.
+               (set-register! (sr IS) (car x) #T #F)
                ;(register-value-set! (sr II) 0)  Already initialized.
                (instruction-interpreter))
         (begin (assert (eq? 'stream-empty x))
@@ -110,15 +114,9 @@
   (define pointer? register-pointer?)
   (define (non-pointer? r) (not (pointer? r)))
 
-  ; TODO: The Trip Handler Table doesn't seem good.  Maybe trips aren't good.
-  ; How to handle user-caused processor exceptions?
-
   (define-special-registers special-register-set
     (IS     pointer?)                 ; Instruction Segment
     (II     non-pointer?)             ; Instruction Index
-    #|(TH     pointer?)               ; Trip Handler Table
-    (TS     pointer?)                 ; Trip Instruction Segment
-    (TI     non-pointer?)             ; Trip Instruction Index |#
     )
 
   (define (set-register! r v p? incr?)
@@ -177,28 +175,13 @@
         (processor-exception 'invalid-instruction))
       ((vector-ref operations-table opcode) inst-word)))
 
-  #;(define (trip-handler ex-num)
-    (assert (srp? TH))
-    (let-values (((handler-id ptr?) (data-array-ref (srv TH) ex-num)))
-      ; If trying to use the trip-handler-table array
-      ; causes a processor exception during trip-handler?  Shouldn't
-      ; just do a processor-exception for that, because the
-      ; trip-handler-table array shouldn't be used again (because
-      ; it's invalid).
-      (assert ptr?)
-      handler-id))
-
   (define (instruction-interpreter)
     (assert (srp? IS))
     (assert (not (srp? II)))
     (let ((id (srv IS)) (i (srv II)))
-      (register-value-set! (sr II) (+ 1 i))
-      (guard (ex #;((processor-exception? ex)
-                    (srv-set! TS (srv IS))
-                    (srv-set! TI (srv II))
-                    (srv-set! IS (trip-handler (processor-exception-num ex)))
-                    (srv-set! II 0)))
+      (guard (ex #;((processor-exception? ex) TODO))
         (operation (get-inst id i))))
+    (register-value-set! (sr II) (+ 1 (srv II)))
     (instruction-interpreter))
 
 
@@ -253,35 +236,84 @@
                      r i)))))
 
     (set-multiple-immediates
-     TODO)
+     (let-values (((r _) (group-select (operand inst-word 0) (operand inst-word 1))))
+       (register-value-set! (sr II)
+         (fold-left (lambda (i r)
+                      (let ((i (+ 1 i)))
+                        (let-values (((v p?) (inst-array-ref (srv IS) i)))
+                          (r-set! r v p? #T))
+                        i))
+                    (srv II) r))))
 
     (set-immediate
-     (r-set! (operand inst-word 0) (bitwise-bit-field inst-word 32 64) #F #F))
+     (let ((v (bitwise-bit-field inst-word 32 64)))
+       (r-set! (operand inst-word 0)
+               (if (bitwise-bit-set? v 31)
+                 (bitwise-ior #xFFFFFFFF00000000 v)
+                 v)
+               #F #F)))
 
-    (sign-extend
-     TODO)
+  #;(sign-extend
+     (let ((src (operand inst-word 1)))
+       (when (rp? src) (processor-exception 'pointer))
+       (let* ((num (rv src))
+              (pos (bitwise-and #x3F (operand inst-word 2)))
+              (mask (bitwise-arithmetic-shift-left -1 pos)))
+         (r-set! (operand inst-word 0)
+                 (if (bitwise-bit-set? num pos)
+                   (bitwise-ior mask num)
+                   (bitwise-and (bitwise-not mask) num))
+                 #F #F))))
+
+    (copy
+     (let ((src (operand inst-word 1)))
+       (r-set! (operand inst-word 0) (rv src) (rp? src) #T)))
+
+    (get-special
+     (let ((s (operand inst-word 1)))
+       (r-set! (operand inst-word 0) (srv s) (srp? s) #T)))
 
     (set-special
      (sr-copy! (operand inst-word 0) (operand inst-word 1)))
 
-    #;(resume
-     (let ((retry (operand inst-word 0)))
-       (assert (srp? TS))
-       (assert (not (srp? TI)))
-       (srv-set! IS (srv TS))
-       (if (positive? retry)
-         (if (= 1 retry)
-           ; Retry the tripped instruction.
-           (srv-set! II (- (srv TI) 1))
-           ; Pretend operand-1 was the tripped instruction and "retry" that.
-           (operation (rv (operand inst-word 1))))
-         ; Execute the instruction following the tripped one.
-         (srv-set! II (srv TI))))))
+    (ior
+     (arith bitwise-ior inst-word))
+
+    (sub
+     (arith (lambda (a b) (let ((x (- a b))) (if (negative? x) (+ (expt 2 64) x) x)))
+            inst-word))
+
+    (jump-zero     (jump zero?     inst-word))
+    (jump-positive (jump positive? inst-word))
+    (jump-negative (jump negative? inst-word))
+
+    (goto
+     (let ((seg (operand inst-word 0))
+           (i (operand inst-word 1)))
+       (unless (rp? seg) (processor-exception 'not-pointer))
+       (when (rp? i) (processor-exception 'pointer))
+       (set-register! (sr IS) (rv seg) #T #T)
+       (register-value-set! (sr II) (rv i))))
+
+    )
 
   (define (operand inst-word i)
     (assert (<= 0 i 2))
     (let ((i (* 16 (+ 1 i))))
       (bitwise-bit-field inst-word i (+ 16 i))))
+
+  (define (arith proc inst-word)
+    (let ((src1 (operand inst-word 1)) (src2 (operand inst-word 2)))
+      (when (or (rp? src1) (rp? src2)) (processor-exception 'pointer))
+      (r-set! (operand inst-word 0) (proc (rv src1) (rv src2)) #F #F)))
+
+  (define (jump pred inst-word)
+    (let ((r (operand inst-word 0)))
+      (when (rp? r) (processor-exception 'pointer))
+      (when (pred (rv r))
+        (let* ((x (bitwise-bit-field inst-word 32 64))
+               (offset (if (bitwise-bit-set? x 31) (- x (expt 2 32)) x)))
+          (register-value-set! (sr II) (+ offset (srv II)))))))
 
   ;-----------------------------------------------------------------------------
 

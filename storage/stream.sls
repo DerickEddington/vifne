@@ -67,6 +67,7 @@
             (let ((n (ref-word s notify-field)))
               (and (positive? n)
                    (begin (incr-refcount! n) ; Because it's returned.
+                          ; TODO?: Should it be cleared?  Might be useful if not.
                           (set-field! s notify-field 0 #F)
                           n))))
 
