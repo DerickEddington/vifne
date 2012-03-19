@@ -1,0 +1,59 @@
+#! /usr/bin/env scheme-script
+
+#!r6rs
+;; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+;; LICENSE from the original collection this file is distributed with.
+
+(import (rnrs base)
+        (rnrs io simple)
+        (vifne util assembler)
+        (vifne util assembler storage)
+        (vifne start)
+        (vifne config)
+        (vifne util command-line))
+
+(define (read-all p)
+  (let loop ((a '()))
+    (let ((x (read p)))
+      (if (eof-object? x)
+        (reverse a)
+        (loop (cons x a))))))
+
+(define (print n)
+  (display "Chunk ID of stored instruction-segment:\n")
+  (display "#x") (display (number->string n 16)) (newline))
+
+
+(process-command-line! "-f" "--magic")
+
+(define storage-file
+  (command-line-argument "-f"
+                         () string-non-empty?
+                         default-storage-file))
+
+(define magic?
+  ; If this is enabled, the assembler allows synthesizing pointers from numbers,
+  ; which bypasses capability-security, which sometimes is necessary for
+  ; manually constructing a system to run in the emulator.
+  (command-line-argument "--magic"
+                         (true-string?) boolean?
+                         #F))
+
+(define input
+  (command-line-argument 'rest
+                         (car open-input-file) values
+                         (current-input-port)))
+
+
+(define clean-up (initialize-libraries! storage-file #F))
+
+; Print the chunk ID of the instruction-segment in the mmap'ed storage file, so
+; it can be used in some other assembly (e.g. via pointer magic).
+(print
+ ; Copy the instruction-segment into new chunks in the mmap'ed storage file.
+ (store!
+  ; Assemble an instruction-segment array-tree represented as Scheme-record
+  ; chunks.
+  (assemble (read-all input) magic?)))
+
+(clean-up)

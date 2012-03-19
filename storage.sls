@@ -14,11 +14,13 @@
     tagged?
     tags
     id->ptr
+    valid-id?
     ref-word
     set-word!
     ref-field
     set-field!
     alloc-chunk!
+    chunk-allocated?
     incr-refcount!
     decr-refcount!
     free-chunk!
@@ -82,6 +84,9 @@
 
   (define (id->ptr id) (integer->pointer (+ storage-addr id)))
 
+  (define (valid-id? x)
+    (and (integer? x) (exact? x) (< 0 x storage-size) (zero? (mod x chunk&meta-size))))
+
 
   ; TODO?: Should the control chunk use its meta chunk like a normal chunk?
   ; I.e. set its ref-count to 1, guard tagged, pointer flags used, next-free
@@ -144,6 +149,9 @@
                 id))))
       ((tags) (alloc-chunk! tags 1))
       (() (alloc-chunk! 0 1))))
+
+  (define (chunk-allocated? id)
+    (positive? (ref-word (id->ptr id) reference-count-field)))
 
   (define (free-chunk! id)
     (let ((m (id->ptr id)))

@@ -5,55 +5,27 @@
 ;; LICENSE from the original collection this file is distributed with.
 
 (import (rnrs base)
-        (rnrs control)
-        (rnrs programs)
-        (rnrs lists)
         (vifne start)
         (vifne config)
-        (vifne host))
+        (vifne host)
+        (vifne util command-line))
 
-(define (string-non-empty? x) (positive? (string-length x)))
+(process-command-line! "-f" "-n" "-i")
 
-(define (die msg . a) (apply error (car (command-line)) msg a))
+(define storage-file
+  (command-line-argument "-f"
+                         () string-non-empty?
+                         default-storage-file))
 
+(define number-processors
+  (command-line-argument "-n"
+                         (string->number) exact-positive-integer?
+                         (number-host-processors)))
 
-(define prog-args
-  (let loop ((c (cdr (command-line))) (o '()) (a '()))
-    (if (null? c)
-      (if (null? a) o (cons (cons 'rest (reverse a)) o))
-      (if (and (< 1 (string-length (car c)))
-               (char=? #\- (string-ref (car c) 0)))
-        (if (null? (cdr c))
-          (die "argument missing value" (car c))
-          (loop (cddr c) (cons (cons (car c) (cadr c)) o) a))
-        (loop (cdr c) o (cons (car c) a))))))
-
-(let ((extra (remp (lambda (x) (member (car x) '("-f" "-n" "-i"))) prog-args)))
-  (unless (null? extra) (apply die "extra arguments" extra)))
-
-
-(define (get-arg name valid? default . fs)
-  (cond ((assoc name prog-args) => (lambda (p)
-                                     (let ((v (fold-left (lambda (a f) (f a)) (cdr p) fs)))
-                                       (if (valid? v) v
-                                         (die "invalid argument value" name (cdr p))))))
-        (else (default))))
-
-(define-syntax arg
-  (syntax-rules ()
-    ((_ name (f ...) pred default)
-     (get-arg name pred (lambda () default) f ...))))
-
-
-(define storage-file       (arg "-f" () string-non-empty?
-                                default-storage-file))
-
-(define number-processors  (arg "-n" (string->number) exact-positive-integer?
-                                (number-host-processors)))
-
-(define (true-string s) (string=? "true" s))
-
-(define initialize-storage-file?  (arg "-i" (true-string) boolean? #F))
+(define initialize-storage-file?
+  (command-line-argument "-i"
+                         (true-string?) boolean?
+                         #F))
 
 
 (define stop-emulator! (start-emulator! storage-file

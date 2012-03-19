@@ -6,6 +6,7 @@
 
 (library (vifne start)
   (export
+    initialize-libraries!
     start-emulator!)
   (import
     (rnrs base)
@@ -38,11 +39,16 @@
       ((_ expr ...)
        (guard (ex ((error? ex))) expr ...))))
 
-  (define (start-emulator! storage-file init-file? num-procs)
+  (define (initialize-libraries! storage-file init-file?)
     (let* ((size (file-size storage-file))
            (addr (mmap-storage-file storage-file size)))
       (storage-set! addr size init-file? alloc-stream!)
       (PID-set! (getpid))
+      ; Return the procedure that cleans-up the initialization.
+      (lambda () (munmap addr size))))
+
+  (define (start-emulator! storage-file init-file? num-procs)
+    (let ((clean-up (initialize-libraries! storage-file init-file?)))
       ; The above must happen before the child processes are forked.
       (let ((sc-pid (fork* (start-storage-controller num-procs)))
             (sc-mq "storage-controller"))
@@ -60,6 +66,6 @@
                           (cons sc-pid proc-pids))
                 (for-each (lambda (mq) (ignore-error (destroy-message-queue mq)))
                           (cons sc-mq proc-mqs))
-                (ignore-error (munmap addr size)))))))))
+                (ignore-error (clean-up)))))))))
 
 )

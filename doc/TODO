@@ -1,5 +1,15 @@
 Need to carefully analyze reference counting to prove it all correct.
 
+It seems possible to create a reference cycle by putting in a stream a chunk
+that references one of the stream's handles:
+  chunk -> handle -> stream -> elements -> chunk
+This could prevent all chunks in the cycle from being freed, even if there are
+no outside references to any of them, if the chunk is put in the stream and then
+the last outside reference to the stream is cleared.  I think this can't be
+prevented.  This is only a problem if it's desired to lose all references to a
+stream even if there are elements in it, which seems uncommon, however this is
+very reasonable to expect to be able to do.  Not sure what to do about this...
+
 Need to be careful about deadlocking the SMS or a processor because of
 message-queue operations blocking.  What if the SMS replies to a processor but
 the processor's message queue is full - the SMS will block until the processor
