@@ -29,8 +29,6 @@
     (vifne config)
     (vifne storage))
 
-  (define word-num-max (- (expt 2 (* 8 word-size)) 1))
-
   ; This type represents a chunk outside an emulator storage file.  The fields
   ; field may contain either: numbers (representing non-pointer values), or
   ; chunk records (representing pointers to those chunks), or magic-pointer
@@ -38,13 +36,16 @@
   ; between chunk records are avoided by not providing a means to mutate the
   ; fields.
   (define-record-type chunk (fields fields))
-  (define (new-chunk . a)
-    (assert (= chunk-wsz (length a)))
-    (assert (for-all (lambda (x) (or (and (integer? x) (exact? x) (<= 0 x word-num-max))
+  (define (new-chunk fields)
+    ; Takes a variable-length list and fills end with zeros if needed.
+    (assert (<= (length fields) chunk-wsz))
+    (assert (for-all (lambda (x) (or (word-integer? x)
                                      (chunk? x)
                                      (magic-pointer? x)))
-                     a))
-    (make-chunk (apply vector a)))
+                     fields))
+    (make-chunk (list->vector
+                 (append fields (vector->list
+                                 (make-vector (- chunk-wsz (length fields)) 0))))))
   (define (chunk-ref c i) (vector-ref (chunk-fields c) i))
 
   ; This type represents a synthesized pointer to a chunk.

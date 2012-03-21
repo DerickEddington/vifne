@@ -2,18 +2,27 @@
 ; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
 ; LICENSE from the original collection this file is distributed with.
 
-; This library is the emulated processor.  This library must be used only after
-; forking a process for a processor.
+; This library implements an emulated processor.  It should be used after
+; forking a process for a processor, except special uses like the assembler.
 
 ; TODO?: Separate into libraries the stuff that's useful to other things like an
 ; assembler, e.g. (vifne processor registers), (vifne processor operations), and
-; (vifne processor array).
+; (vifne processor array). - Might be possible if send* and receive* can be
+; passed to the sub-libraries via some initialization procedure (called in
+; start-processor) each sub-library would provide.  Separating the libraries
+; would also have the benefit of allowing the assembler to import what it needs
+; without initializing the cache data structures that consume around 1.5 MB.
 
 ; TODO: How to handle user-caused processor exceptions?
 
 (library (vifne processor)
   (export
-    start-processor)
+    start-processor
+    operation-code-bitsize
+    get-operation-info
+    operation-info-code
+    operation-info-operand-bitsizes
+    operation-info-operand-validators)
   (import
     (rnrs base)
     (rnrs control)
@@ -26,7 +35,8 @@
     (vifne config)
     (vifne posix)
     (vifne message-queue)
-    (prefix (only (vifne storage) load-chunk store-chunk!) storage:))
+    (prefix (only (vifne storage) load-chunk store-chunk!) storage:)
+    (only (vifne storage) valid-id?))
 
   (define sid)
   (define storage)
@@ -120,6 +130,7 @@
     )
 
   (define (set-register! r v p? incr?)
+    (assert ((if p? valid-id? non-negative-word-integer?) v))
     (let ((oldv (register-value r))
           (oldp? (register-pointer? r)))
       (register-value-set! r v)
@@ -141,15 +152,7 @@
         (processor-exception 'invalid-special-register-value))
       (set-register! s (register-value x) (register-pointer? x) #T)))
 
-  (define (group-select reg sel)
-    (let ((group (bitwise-and #xFFF0 reg)))
-      (let loop ((i (- chunk-wsz 1)) (r '()) (n '()))
-        (if (negative? i)
-          (values r n)
-          (if (bitwise-bit-set? sel i)
-            (loop (- i 1) (cons (+ group i) r) (cons i n))
-            (loop (- i 1) r n))))))
-
+  ;-----------------------------------------------------------------------------
 
   (define (array-ref handle-id index get-chunk)
     (define depth-field 0)
@@ -171,23 +174,16 @@
               (processor-exception 'out-of-bounds))
             (let*-values (((i r) (div-and-mod i (expt chunk-wsz d)))
                           ((t tp?) (chunk-ref (get-chunk t) i)))
-              (unless tp? (processor-exception 'invalid-array))
+              (unless tp? (processor-exception 'out-of-bounds))
               (loop (- d 1) r t)))))))
 
   (define (data-array-ref id i) (array-ref id i get-data-chunk))
   (define (inst-array-ref id i) (array-ref id i get-inst-chunk))
 
-
   (define (get-inst id i)
     (let-values (((inst-word ptr?) (inst-array-ref id i)))
       (when ptr? (processor-exception 'invalid-instruction))
       inst-word))
-
-  (define (operation inst-word)
-    (let ((opcode (bitwise-and #xFFFF inst-word)))
-      (unless (< opcode (vector-length operations-table))
-        (processor-exception 'invalid-instruction))
-      ((vector-ref operations-table opcode) inst-word)))
 
   (define (instruction-interpreter)
     (assert (srp? IS))
@@ -198,24 +194,92 @@
     (register-value-set! (sr II) (+ 1 (srv II)))
     (instruction-interpreter))
 
+  ;-----------------------------------------------------------------------------
+
+  (define operation-code-bitsize 16)
+
+  (define (operation inst-word)
+    (let ((opcode (bitwise-and #xFFFF inst-word)))
+      (unless (< opcode (vector-length operations-table))
+        (processor-exception 'invalid-instruction))
+      ((vector-ref operations-table opcode) inst-word)))
+
+  (define (make-operation-proc bitsizes proc)
+    (assert (for-all exact-positive-integer? bitsizes))
+    (assert (<= (apply + bitsizes) (- 64 operation-code-bitsize)))
+    (lambda (inst-word)
+      (apply proc (let loop ((operands '())
+                             (curr operation-code-bitsize)
+                             (bsz bitsizes))
+                    (if (null? bsz)
+                      (reverse operands)
+                      (let ((next (+ (car bsz) curr)))
+                        (loop (cons (bitwise-bit-field inst-word curr next)
+                                    operands)
+                              next
+                              (cdr bsz))))))))
+
+
+  ; Operation information used for assembly language.
+  (define-record-type operation-info
+    (fields symbol code operand-bitsizes operand-validators))
+
+  ; Operand validators:
+  (define (register-code? x)
+    (and (exact-non-negative-integer? x) (< x register-set-size)))
+  (define (special-register-code? x)
+    (and (exact-non-negative-integer? x) (< x (vector-length special-register-set))))
+  (define (group-mask? x)
+    (and (exact-non-negative-integer? x) (<= x #xFFFF)))
+  (define (signed-32bit? x)
+    (and (exact-integer? x) (<= (- (expt 2 31)) x (- (expt 2 31) 1))))
+
+  (define (get-operation-info sym) (hashtable-ref operations-infos sym #F))
+
 
   (define-syntax define-operations
-    (syntax-rules (+ vector)
-      ((_ (+ . n) (vector p ...) t v (op . body) . r)
-       (begin (define op (+ . n))
-              (define-operations (+ 1 (+ . n))
-                (vector p ... (lambda (v) . body))
-                t v . r)))
-      ((_ _ (vector . procs) table _)
-       (define table (vector . procs)))
-      ((_ . r)
-       (define-operations (+ 0) (vector) . r))))
+    (syntax-rules (+ vector list)
+      ; No more operation definitions.  Define the tables.
+      ((_ (+ . n)
+          (vector . procs)
+          (list . infos)
+          (proc-table info-table))
+       (begin
+         (define proc-table (vector . procs))
+         (define info-table
+           (let ((ht (make-eq-hashtable (+ . n))))
+             (for-each (lambda (x) (hashtable-set! ht (operation-info-symbol x) x))
+                       (list . infos))
+             ht))))
+      ; Parse an operation definition.  Recur to continue.
+      ((_ (+ . n)
+          (vector procs ...)
+          (list infos ...)
+          (pt it)
+          ((op-sym (operand bitsize pred) ...) . body)
+          . r)
+       (define-operations (+ 1 (+ . n))
+                          (vector procs ...
+                                  (make-operation-proc '(bitsize ...)
+                                    (lambda (operand ...) . body)))
+                          (list infos ...
+                                (make-operation-info 'op-sym (+ . n)
+                                                     '(bitsize ...)
+                                                     (list pred ...)))
+                          (pt it) . r))
+      ; Entry.
+      ((_ (pt it) ((s (o bs pr) ...) . b) ...)
+       (define-operations (+ 0) (vector) (list)
+                          (pt it) ((s (o bs pr) ...) . b) ...))))
 
-  (define-operations operations-table inst-word
 
-    (ignore #F)
+  (define-operations (operations-table operations-infos)
 
-    (chunk-create
+    ((ignore) #F)
+
+    ((chunk-create (dest    16 register-code?)
+                   (grp-sel 16 group-mask?)
+                   (src-grp 16 register-code?))
      ; TODO?: If in the future there's a cache of chunks for allocating, this
      ; will change to use it, instead of communicating with the storage
      ; controller here.
@@ -224,7 +288,7 @@
        (when (symbol? x) (processor-exception x))
        (let* ((id (cadr x))
               (c (new-chunk id)))
-         (let-values (((r i) (group-select (operand inst-word 2) (operand inst-word 1))))
+         (let-values (((r i) (group-select src-grp grp-sel)))
            ; Set the fields of the chunk according to the register group
            ; selection, and collect any pointers set in the fields.
            (let ((incr (fold-left (lambda (a r i)
@@ -239,20 +303,22 @@
          (store-chunk! c)
          ; Set the specified register to point to the chunk, but don't increment
          ; the reference count because the allocation already set it to 1.
-         (r-set! (operand inst-word 0) id #T #F))))
+         (r-set! dest id #T #F))))
 
-    (chunk-get
-     (let ((r (operand inst-word 2)))
-       (unless (rp? r) (processor-exception 'not-pointer))
-       (let ((c (get-data-chunk (rv r))))
-         (let-values (((r i) (group-select (operand inst-word 0) (operand inst-word 1))))
-           (for-each (lambda (r i)
-                       (let-values (((v p?) (chunk-ref c i)))
-                         (r-set! r v p? #T)))
-                     r i)))))
+    ((chunk-get (dest-grp 16 register-code?)
+                (grp-sel  16 group-mask?)
+                (src      16 register-code?))
+     (unless (rp? src) (processor-exception 'not-pointer))
+     (let ((c (get-data-chunk (rv src))))
+       (let-values (((r i) (group-select dest-grp grp-sel)))
+         (for-each (lambda (r i)
+                     (let-values (((v p?) (chunk-ref c i)))
+                       (r-set! r v p? #T)))
+                   r i))))
 
-    (set-multiple-immediates
-     (let-values (((r _) (group-select (operand inst-word 0) (operand inst-word 1))))
+    ((set-multiple-immediates (dest-grp 16 register-code?)
+                              (grp-sel  16 group-mask?))
+     (let-values (((r _) (group-select dest-grp grp-sel)))
        (register-value-set! (sr II)
          (fold-left (lambda (i r)
                       (let ((i (+ 1 i)))
@@ -261,75 +327,81 @@
                         i))
                     (srv II) r))))
 
-    (set-immediate
-     (let ((v (bitwise-bit-field inst-word 32 64)))
-       (r-set! (operand inst-word 0)
-               (if (bitwise-bit-set? v 31)
-                 (bitwise-ior #xFFFFFFFF00000000 v)
-                 v)
-               #F #F)))
+    ((set-immediate (dest 16 register-code?)
+                    (v    32 signed-32bit?))
+     (r-set! dest
+             ; v is always non-negative when extracted.
+             (if (bitwise-bit-set? v 31)
+               (bitwise-ior #xFFFFFFFF00000000 v)
+               v)
+             #F #F))
 
-  #;(sign-extend
-     (let ((src (operand inst-word 1)))
-       (when (rp? src) (processor-exception 'pointer))
-       (let* ((num (rv src))
-              (pos (bitwise-and #x3F (operand inst-word 2)))
-              (mask (bitwise-arithmetic-shift-left -1 pos)))
-         (r-set! (operand inst-word 0)
-                 (if (bitwise-bit-set? num pos)
-                   (bitwise-ior mask num)
-                   (bitwise-and (bitwise-not mask) num))
-                 #F #F))))
+    ((copy (dest 16 register-code?)
+           (src  16 register-code?))
+     (r-set! dest (rv src) (rp? src) #T))
 
-    (copy
-     (let ((src (operand inst-word 1)))
-       (r-set! (operand inst-word 0) (rv src) (rp? src) #T)))
+    ((get-special (dest 16 register-code?)
+                  (src  16 special-register-code?))
+     (r-set! dest (srv src) (srp? src) #T))
 
-    (get-special
-     (let ((s (operand inst-word 1)))
-       (r-set! (operand inst-word 0) (srv s) (srp? s) #T)))
+    ((set-special (dest 16 special-register-code?)
+                  (src  16 register-code?))
+     (sr-copy! dest src))
 
-    (set-special
-     (sr-copy! (operand inst-word 0) (operand inst-word 1)))
+    ((ior (dest 16 register-code?)
+          (src1 16 register-code?)
+          (src2 16 register-code?))
+     (arith bitwise-ior dest src1 src2))
 
-    (ior
-     (arith bitwise-ior inst-word))
-
-    (sub
+    ((sub (dest 16 register-code?)
+          (src1 16 register-code?)
+          (src2 16 register-code?))
      (arith (lambda (a b) (let ((x (- a b))) (if (negative? x) (+ (expt 2 64) x) x)))
-            inst-word))
+            dest src1 src2))
 
-    (jump-zero     (jump zero?     inst-word))
-    (jump-positive (jump positive? inst-word))
-    (jump-negative (jump negative? inst-word))
+    ((jump-zero (test   16 register-code?)
+                (offset 32 signed-32bit?))
+     (jump zero? test offset))
 
-    (goto
-     (let ((seg (operand inst-word 0))
-           (i (operand inst-word 1)))
-       (unless (rp? seg) (processor-exception 'not-pointer))
-       (when (rp? i) (processor-exception 'pointer))
-       (set-register! (sr IS) (rv seg) #T #T)
-       (register-value-set! (sr II) (rv i))))
+    ((jump-positive (test   16 register-code?)
+                    (offset 32 signed-32bit?))
+     (jump positive? test offset))
+
+    ((jump-negative (test   16 register-code?)
+                    (offset 32 signed-32bit?))
+     (jump negative? test offset))
+
+    ((goto (seg 16 register-code?)
+           (i   16 register-code?))
+     (unless (rp? seg) (processor-exception 'not-pointer))
+     (when (rp? i) (processor-exception 'pointer))
+     (set-register! (sr IS) (rv seg) #T #T)
+     (register-value-set! (sr II) (rv i)))
 
     )
 
-  (define (operand inst-word i)
-    (assert (<= 0 i 2))
-    (let ((i (* 16 (+ 1 i))))
-      (bitwise-bit-field inst-word i (+ 16 i))))
+  (define (group-select reg sel)
+    (let ((group (bitwise-and #xFFF0 reg)))
+      (let loop ((i (- chunk-wsz 1)) (r '()) (n '()))
+        (if (negative? i)
+          (values r n)
+          (if (bitwise-bit-set? sel i)
+            (loop (- i 1) (cons (+ group i) r) (cons i n))
+            (loop (- i 1) r n))))))
 
-  (define (arith proc inst-word)
-    (let ((src1 (operand inst-word 1)) (src2 (operand inst-word 2)))
-      (when (or (rp? src1) (rp? src2)) (processor-exception 'pointer))
-      (r-set! (operand inst-word 0) (proc (rv src1) (rv src2)) #F #F)))
+  (define (arith proc dest src1 src2)
+    (when (or (rp? src1) (rp? src2)) (processor-exception 'pointer))
+    (r-set! dest (proc (rv src1) (rv src2)) #F #F))
 
-  (define (jump pred inst-word)
-    (let ((r (operand inst-word 0)))
-      (when (rp? r) (processor-exception 'pointer))
-      (when (pred (rv r))
-        (let* ((x (bitwise-bit-field inst-word 32 64))
-               (offset (if (bitwise-bit-set? x 31) (- x (expt 2 32)) x)))
-          (register-value-set! (sr II) (+ offset (srv II)))))))
+  (define (jump pred test offset)
+    (when (rp? test) (processor-exception 'pointer))
+    (when (pred (rv test))
+      ; offset is always non-negative when extracted, so make it negative if
+      ; it's signed.
+      (let ((offset (if (bitwise-bit-set? offset 31)
+                      (- offset (expt 2 32))
+                      offset)))
+        (register-value-set! (sr II) (+ offset (srv II))))))
 
   ;-----------------------------------------------------------------------------
 

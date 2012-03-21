@@ -1,0 +1,29 @@
+; Contrived to excercise some assembly.
+(
+ (set-immediate 0 #x12345678)
+ (set-immediate 3 -7)
+ (set-multiple-immediates 0 #x4400)
+ #xFEDCBA9876543210
+ (pointer #xABC00)
+ (chunk 1 -2 3 (pointer #x700) -5 6 -7
+        (chunk 11 (copy 98 76) 33 44 55 66 (ior 4 3 2) 88 99
+               (pointer #xF00) 11 22 33 44 55 66)
+        #xFFFFFFFFFFFFFFFF #x-8000000000000000 #xB #x-C #xD #x-E #xF #x10)
+ (chunk-create #x1D #x4409 0)
+
+ (copy #x2B #x1D)
+ (get-special #x1D 0)
+
+ (set-immediate #xFF 5)
+ (sub 3 3 #xFF)
+ (sub #xFF #xFF 1)
+ (jump-positive #xFF -2)
+
+ (set-immediate #xA8 16)
+ (set-special 1 #xA8) ; Unconditional jump.
+
+ (chunk-get #xC0 #x4400 #x2B)
+ (goto #xCE #xCA)
+
+ (ignore)
+)

@@ -4,7 +4,12 @@
 ;; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
 ;; LICENSE from the original collection this file is distributed with.
 
+; This program compiles assembly language of the emulated computer, and stores
+; the compiled code in new chunks in an emulator storage file.  It can compile
+; either the high-level or the low-level languages.  TODO more.
+
 (import (rnrs base)
+        (rnrs lists)
         (rnrs io simple)
         (vifne util assembler)
         (vifne util assembler storage)
@@ -20,11 +25,16 @@
         (loop (cons x a))))))
 
 (define (print n)
-  (display "Chunk ID of stored instruction-segment:\n")
+  (display "Chunk ID of stored graph:\n")
   (display "#x") (display (number->string n 16)) (newline))
 
 
-(process-command-line! "-f" "--magic")
+(process-command-line! "-l" "-f" "--magic")
+
+(define language-level
+  (command-line-argument "-l"
+                         (string->symbol) (lambda (s) (memq s '(low high)))
+                         'high))
 
 (define storage-file
   (command-line-argument "-f"
@@ -47,13 +57,20 @@
 
 (define clean-up (initialize-libraries! storage-file #F))
 
-; Print the chunk ID of the instruction-segment in the mmap'ed storage file, so
-; it can be used in some other assembly (e.g. via pointer magic).
+; Print the chunk ID of the new graph in the mmap'ed storage file, so it can be
+; used in some other assembly (e.g. via pointer magic).
 (print
- ; Copy the instruction-segment into new chunks in the mmap'ed storage file.
+ ; Copy the assembled chunk graph into new chunks in the mmap'ed storage file.
  (store!
-  ; Assemble an instruction-segment array-tree represented as Scheme-record
-  ; chunks.
-  (assemble (read-all input) magic?)))
+  ; Assemble an instruction-segment array-tree, or an arbitrary chunk graph,
+  ; represented as Scheme-record chunks.
+  (assemble-low (case language-level
+                  ((high)
+                   (assemble-high (read-all input)))
+                  ((low)
+                   ; Low-level forms must all be in one datum, to distinguish
+                   ; between instruction segment or chunk forms.
+                   (read input)))
+                magic?)))
 
 (clean-up)

@@ -1,0 +1,33 @@
+; Contrived to excercise some assembly.
+
+; TODO: Make this more like low-basic.vasm.
+
+(import (rnrs base))
+(define C #xFEDCBA9876543210)
+(define (P x) (* 2 x))
+
+(set-immediate r0 #x12345678)
+(set-immediate r3 -7)
+(set-multiple-immediates (select rA rE))
+(data C)
+(data (magic-pointer (P #x380)))
+(chunk-create r1D (select r0 r3 rA rE))
+
+(copy r2B r1D)
+(get-special r1D srIS)
+
+(let ((c rFF))
+  (set-immediate c 5)
+  (label loop)
+  (sub r3 r3 c)
+  (sub c c 1)
+  (jump-positive c loop))
+
+(set-immediate rA8 skip) ; Forward reference to label, and absolute value of label.
+(set-special srII rA8)   ; Unconditional jump.
+
+(chunk-get (select rCE rCA) r2B)
+(goto rCE rCA)
+
+(label skip)
+(ignore)

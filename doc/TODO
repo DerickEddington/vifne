@@ -1,3 +1,7 @@
+Fix ;; comments to be single ;
+
+Make low-level and high-level disassemblers.
+
 Need to carefully analyze reference counting to prove it all correct.
 
 It seems possible to create a reference cycle by putting in a stream a chunk

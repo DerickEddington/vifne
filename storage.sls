@@ -82,10 +82,12 @@
     ; (vifne storage stream) because circular imports aren't possible.)
     (check-storage! init? alloc-stream!))
 
-  (define (id->ptr id) (integer->pointer (+ storage-addr id)))
+  (define (id->ptr id)
+    (assert (< id storage-size))
+    (integer->pointer (+ storage-addr id)))
 
   (define (valid-id? x)
-    (and (integer? x) (exact? x) (< 0 x storage-size) (zero? (mod x chunk&meta-size))))
+    (and (non-negative-word-integer? x) (zero? (mod x chunk&meta-size))))
 
 
   ; TODO?: Should the control chunk use its meta chunk like a normal chunk?
