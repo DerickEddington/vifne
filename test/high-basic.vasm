@@ -1,33 +1,40 @@
-; Contrived to excercise some assembly.
+; Contrived to excercise some assembly.  TODO: Delete when there are better tests.
 
-; TODO: Make this more like low-basic.vasm.
+(import (vifne util assembler high-lang)
+        (rnrs base))
 
-(import (rnrs base))
 (define C #xFEDCBA9876543210)
 (define (P x) (* 2 x))
 
-(set-immediate r0 #x12345678)
+(set-immediate r0 (+ #x12345670 8))
 (set-immediate r3 -7)
-(set-multiple-immediates (select rA rE))
+(set-multiple-immediates (group rA 'rE rF))
 (data C)
-(data (magic-pointer (P #x380)))
-(chunk-create r1D (select r0 r3 rA rE))
+(pointer (P #x55E00))
+(chunk 1 -2 3 (pointer #x700) -5 6 -7
+       (chunk 11 (copy 'r62 r4C) 33 44 55 66 (ior r4 r3 'r2) 88 99
+              (pointer #xF00) 11 22
+              'skip 44
+              (set-immediate rFF 'loop) 66)
+       #xFFFFFFFFFFFFFFFF #x-8000000000000000 #xB #x-C #xD #x-E #xF #x10)
+(chunk-create r1D (group r0 r3 rA rE rF))
 
 (copy r2B r1D)
 (get-special r1D srIS)
 
-(let ((c rFF))
+(let ((c rFF) (one r1))
+  (set-immediate one 1)
   (set-immediate c 5)
-  (label loop)
+  (label 'loop)
   (sub r3 r3 c)
-  (sub c c 1)
-  (jump-positive c loop))
+  (sub c c one)
+  (jump-positive c 'loop))
 
-(set-immediate rA8 skip) ; Forward reference to label, and absolute value of label.
+(set-immediate rA8 'skip)
 (set-special srII rA8)   ; Unconditional jump.
 
-(chunk-get (select rCE rCA) r2B)
+(chunk-get (group rCE rCA) r2B)
 (goto rCE rCA)
 
-(label skip)
+(label 'skip)
 (ignore)

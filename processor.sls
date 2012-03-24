@@ -5,6 +5,10 @@
 ; This library implements an emulated processor.  It should be used after
 ; forking a process for a processor, except special uses like the assembler.
 
+; TODO: I think the macros could be simplified to not do (+ . n).  Instead, just
+; make list in one go and use (- (length set) (length (member x set))) to have
+; the ordinal.
+
 ; TODO?: Separate into libraries the stuff that's useful to other things like an
 ; assembler, e.g. (vifne processor registers), (vifne processor operations), and
 ; (vifne processor array). - Might be possible if send* and receive* can be
@@ -231,8 +235,6 @@
     (and (exact-non-negative-integer? x) (< x (vector-length special-register-set))))
   (define (group-mask? x)
     (and (exact-non-negative-integer? x) (<= x #xFFFF)))
-  (define (signed-32bit? x)
-    (and (exact-integer? x) (<= (- (expt 2 31)) x (- (expt 2 31) 1))))
 
   (define (get-operation-info sym) (hashtable-ref operations-infos sym #F))
 
@@ -359,17 +361,17 @@
      (arith (lambda (a b) (let ((x (- a b))) (if (negative? x) (+ (expt 2 64) x) x)))
             dest src1 src2))
 
-    ((jump-zero (test   16 register-code?)
-                (offset 32 signed-32bit?))
-     (jump zero? test offset))
+    ((jump-zero (test  16 register-code?)
+                (index 32 unsigned-32bit?))
+     (jump zero? test index))
 
-    ((jump-positive (test   16 register-code?)
-                    (offset 32 signed-32bit?))
-     (jump positive? test offset))
+    ((jump-positive (test  16 register-code?)
+                    (index 32 unsigned-32bit?))
+     (jump positive? test index))
 
-    ((jump-negative (test   16 register-code?)
-                    (offset 32 signed-32bit?))
-     (jump negative? test offset))
+    ((jump-negative (test  16 register-code?)
+                    (index 32 unsigned-32bit?))
+     (jump negative? test index))
 
     ((goto (seg 16 register-code?)
            (i   16 register-code?))
@@ -393,15 +395,9 @@
     (when (or (rp? src1) (rp? src2)) (processor-exception 'pointer))
     (r-set! dest (proc (rv src1) (rv src2)) #F #F))
 
-  (define (jump pred test offset)
+  (define (jump pred test index)
     (when (rp? test) (processor-exception 'pointer))
-    (when (pred (rv test))
-      ; offset is always non-negative when extracted, so make it negative if
-      ; it's signed.
-      (let ((offset (if (bitwise-bit-set? offset 31)
-                      (- offset (expt 2 32))
-                      offset)))
-        (register-value-set! (sr II) (+ offset (srv II))))))
+    (when (pred (rv test)) (register-value-set! (sr II) index)))
 
   ;-----------------------------------------------------------------------------
 

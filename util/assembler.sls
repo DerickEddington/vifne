@@ -39,13 +39,12 @@
   ;
   ;   <source> : <segment> | <chunk>
   ;   <segment> : (<form> ...)
-  ;   <form> : <instruction> | <data>
+  ;   <form> : <instruction> | <data> | <label>
   ;   <instruction> : (<mnemonic-symbol> <operand> ...)
-  ;   <operand> : <exact-integer>
-  ;   <data> : <word-integer>
-  ;          | (pointer <id-integer>)
-  ;          | <chunk>
+  ;   <operand> : <exact-integer> | <label>
+  ;   <data> : <word-integer> | (pointer <id-integer>) | <chunk>
   ;   <chunk> : (chunk <form> ...)
+  ;   <label> : (label <symbol>)
   ;
   ; It is designed to be representable as standard textual datums (e.g. in
   ; files), and to support both instruction and data definition.
@@ -59,28 +58,28 @@
   ; value for a chunk field.
   ;
   ; A <data> that is a <word-integer> means a non-pointer literal integer value
-  ; for a chunk field.
+  ; for a chunk field.  A <data> that is a (pointer <id-integer>) means a
+  ; "magic" synthesized pointer value for a chunk field, used to bypass
+  ; capability-security, and this must be explicitly enabled.  Allowing <data>s
+  ; in instruction segments is intended for supporting immediate values.  It
+  ; could also be used to specify literal encoded instructions.
   ;
-  ; A <data> that is a (pointer <id-integer>) means a "magic" synthesized
-  ; pointer value for a chunk field, used to bypass capability-security.  This
-  ; must be explicitly enabled.
+  ; A <chunk> means to construct a new graph of new chunks.  <chunk> graphs may
+  ; occur in instruction segments.  And, any form, including instructions, may
+  ; occur in <chunk> graphs.  A <chunk> graph may contain identical <chunk>s
+  ; more than once, to represent multiple references to a chunk (but cycles
+  ; aren't allowed), and this is denoted with <chunk> datums that are eq?, and
+  ; this can be achieved in textual datums via (semi-standard) reader graph
+  ; syntax, e.g.  (chunk #0=(chunk ---) #0# ---).  Be careful to not cause
+  ; cycles in the datums, because that will cause algorithms to recur
+  ; infinitely.
   ;
-  ; Allowing <data>s in instruction segments is intended for supporting
-  ; immediate values.  It could also be used to specify literal encoded
-  ; instructions.
-  ;
-  ; A <chunk> means to construct a new graph of new chunks.
-  ;
-  ; <chunk> graphs may occur in instruction segments.  And, any form, including
-  ; instructions, may occur in <chunk> graphs.
-  ;
-  ; A <chunk> graph may contain identical <chunk>s more than once, to represent
-  ; multiple references to a chunk (but cycles aren't allowed), and this is
-  ; denoted with <chunk> datums that are eq?, and this can be achieved in
-  ; textual datums via (semi-standard) reader graph syntax, e.g.
-  ; (chunk #0=(chunk ---) #0# ---).  Be careful to not cause cycles in the
-  ; datums, because that will cause algorithms to recur infinitely (and probably
-  ; eat all memory).
+  ; A <label> names an index (offset from beginning) in an instruction segment.
+  ; A <label> at the top level of a <segment> means to define a new label bound
+  ; to the following index.  Such labels do not occur in the assembled output,
+  ; and so do not affect the size nor indexes of a segment.  A <label> in an
+  ; <instruction> or <chunk> means a reference to a label, and is replaced with
+  ; the index of the label.
 
 
   (define (assemble-low source magic?)
@@ -89,13 +88,16 @@
     ; as a graph of chunk records, or into an arbitrary chunk graph.
     (define (die msg . a) (apply error 'assemble-low msg a))
 
-    (define (form? x) (or (instruction? x) (data? x)))
+    (define (form? x) (or (instruction? x) (data? x) (label? x)))
 
     (define (instruction? x)
       (and (list? x) (pair? x)
            (symbol? (car x))
-           (not (memq (car x) '(pointer chunk)))
-           (for-all (lambda (o) (or (exact-integer? o) (die "invalid operand" o x)))
+           (not (memq (car x) '(pointer chunk label)))
+           (for-all (lambda (o)
+                      (or (exact-integer? o)
+                          (label? o)
+                          (die "invalid operand" o x)))
                     (cdr x))))
 
     (define (data? x)
@@ -113,6 +115,38 @@
       (and (named-list? 'chunk (+ 1 chunk-wsz) x)
            (for-all (lambda (f) (or (form? f) (die "invalid form" f)))
                     (cdr x))))
+
+    (define (label? x)
+      (and (named-list? 'label 2 x)
+           (symbol? (cadr x))))
+
+    (define (labels->indexes segment)
+      (define (defs)
+        (cdr (fold-left (lambda (a form)
+                          (let ((i (car a)) (l (cdr a)))
+                            (if (label? form)
+                              (if (assq (cadr form) l)
+                                (die "label already defined" form)
+                                (cons* i (cons (cadr form) i) l))
+                              (cons (+ 1 i) l))))
+                        '(0) segment)))
+      (define (replace defs)
+        (define (L x)
+          (if (label? x)
+            (cond ((assq (cadr x) defs) => cdr)
+                  (else (die "undefined label" x)))
+            x))
+        (define (R form)
+          (cond ((instruction? form)
+                 `(,(car form) . ,(map L (cdr form))))
+                ((chunk? form)
+                 `(chunk . ,(map (lambda (f) (if (or (chunk? f) (instruction? f))
+                                               (R f)
+                                               (L f)))
+                                 (cdr form))))
+                (else form)))
+        (map R (remp label? segment)))
+      (replace (defs)))
 
     ; This table maps <chunk> datums to their corresponding chunk records, to
     ; support chunks referred to more than once in a graph.
@@ -169,7 +203,7 @@
       ((and (pair? source) (eq? 'chunk (car source)))
        (transform source))
       ((list? source)
-       (list->array-tree (map transform source)))
+       (list->array-tree (map transform (labels->indexes source))))
       (else (die "invalid source" source))))
 
 
@@ -220,11 +254,9 @@
 
   (define (assemble-high forms)
     ; This is the high-level assembler.  It enables the high-level assembly
-    ; language that supports full use of Scheme and that is based on the (vifne
-    ; util assembler high-lang) library.  It achieves this by compiling the
-    ; language into a Scheme procedure that is evaluated in a configured
-    ; environment.
-    ; TODO: Finish the design.  Hopefully it's possible as imagined.
+    ; language that supports full use of Scheme.  The forms are expected to use
+    ; the (vifne util assembler high-lang) library, directly or indirectly, to
+    ; accumulate low-level forms.
     (define (die msg . a) (apply error 'assemble-high msg a))
     (define-syntax try
       (syntax-rules ()
@@ -233,30 +265,21 @@
            (lambda (e) (die msg e forms))
            (lambda () expr)))))
     (assert (list? forms))
-    ; Transform the forms into a procedure that produces a list of forms
-    ; accepted by the low-level assembler.
-    (let* ((imports
-            (and (pair? forms)
-                 (pair? (car forms))
-                 (eq? 'import (caar forms))
-                 (cdar forms)))
-           (forms
-            (if imports (cdr forms) forms)))
-      (if (null? forms)
-        '()
-        (let ((producer
-               (try (eval `(lambda () . ,forms)
-                          (apply environment
-                                 '(only (rnrs base) lambda)
-                                 '(vifne util assembler high-lang)
-                                 (or imports '())))
-                    "compilation exception")))
-          (try (producer) "execution exception")))))
+    (let* ((imports (and (pair? forms)
+                         (pair? (car forms))
+                         (eq? 'import (caar forms))
+                         (cdar forms)))
+           (forms (if imports (cdr forms) forms)))
+      (try (eval `(eval/accum! . ,forms)
+                 (apply environment
+                        '(only (vifne util assembler high-lang) eval/accum!)
+                        (or imports '())))
+           "evaluation exception")))
 
   ;-----------------------------------------------------------------------------
 
   ; The special forms of the low-level language must not conflict with defined
   ; instruction operation mnemonics.
-  (assert (not (exists get-operation-info '(pointer chunk))))
+  (assert (not (exists get-operation-info '(pointer chunk label))))
 
 )

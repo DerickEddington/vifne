@@ -18,7 +18,9 @@
     exact-positive-integer?
     exact-non-negative-integer?
     word-integer?
-    non-negative-word-integer?)
+    non-negative-word-integer?
+    signed-32bit?
+    unsigned-32bit?)
   (import
     (rnrs base))
 
@@ -49,6 +51,10 @@
     (and (exact-integer? x) (<= word-min-signed x word-max-unsigned)))
   (define (non-negative-word-integer? x)
     (and (word-integer? x) (not (negative? x))))
+  (define (signed-32bit? x)
+    (and (exact-integer? x) (<= (- (expt 2 31)) x (- (expt 2 31) 1))))
+  (define (unsigned-32bit? x)
+    (and (exact-integer? x) (<= 0 x (- (expt 2 32) 1))))
 
   (assert (exact-positive-integer? chunk-size))
   (assert (exact-positive-integer? id-size))
