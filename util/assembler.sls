@@ -24,7 +24,7 @@
     (rnrs exceptions)
     (vifne config)
     (only (vifne storage) valid-id?)
-    (vifne processor)
+    (vifne processor operations)
     (except (vifne util assembler storage) chunk?))
 
   (define (named-list? name size x)

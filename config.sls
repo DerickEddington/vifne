@@ -14,13 +14,14 @@
     default-storage-file
     register-set-size
     cache-size
+    limit-16bit
     exact-integer?
     exact-positive-integer?
     exact-non-negative-integer?
-    word-integer?
-    non-negative-word-integer?
     signed-32bit?
-    unsigned-32bit?)
+    unsigned-32bit?
+    word-integer?
+    non-negative-word-integer?)
   (import
     (rnrs base))
 
@@ -36,6 +37,8 @@
 
   ;-----------------------------------------------------------------------------
 
+  (define limit-16bit (expt 2 16))
+
   (define word-bsz (* 8 word-size))
   (define word-max-unsigned (- (expt 2 word-bsz) 1))
   (define word-max-signed (- (expt 2 (- word-bsz 1)) 1))
@@ -47,14 +50,16 @@
     (and (exact-integer? x) (positive? x)))
   (define (exact-non-negative-integer? x)
     (and (exact-integer? x) (not (negative? x))))
-  (define (word-integer? x)
-    (and (exact-integer? x) (<= word-min-signed x word-max-unsigned)))
-  (define (non-negative-word-integer? x)
-    (and (word-integer? x) (not (negative? x))))
+
   (define (signed-32bit? x)
     (and (exact-integer? x) (<= (- (expt 2 31)) x (- (expt 2 31) 1))))
   (define (unsigned-32bit? x)
     (and (exact-integer? x) (<= 0 x (- (expt 2 32) 1))))
+
+  (define (word-integer? x)
+    (and (exact-integer? x) (<= word-min-signed x word-max-unsigned)))
+  (define (non-negative-word-integer? x)
+    (and (word-integer? x) (not (negative? x))))
 
   (assert (exact-positive-integer? chunk-size))
   (assert (exact-positive-integer? id-size))
