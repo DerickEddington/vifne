@@ -5,10 +5,6 @@
 ; This library implements an emulated processor.  It should be used after
 ; forking a process for a processor, except special uses like the assembler.
 
-; TODO: I think the macros could be simplified to not do (+ . n).  Instead, just
-; make list in one go and use (- (length set) (length (member x set))) to have
-; the ordinal.
-
 ; TODO?: Separate into libraries the stuff that's useful to other things like an
 ; assembler, e.g. (vifne processor registers), (vifne processor operations), and
 ; (vifne processor array). - Might be possible if send* and receive* can be
@@ -105,25 +101,19 @@
   (define-record-type special-register (parent register) (fields validator))
 
   (define register-set
-    (do ((i register-set-size (- i 1))
-         (l '() (cons (make-register 0 #F) l)))
-        ((zero? i) (list->vector l))))
-
-  #;(define (always-true _) #T)
+    (let ((v (make-vector register-set-size)))
+      (do ((i 0 (+ 1 i)))
+          ((= register-set-size i))
+        (vector-set! v i (make-register 0 #F)))
+      v))
 
   (define-syntax define-special-registers
-    (syntax-rules (+ vector)
-      ((_ (+ . n) (vector regs ...) set (special validator) . r)
-       (begin (define special (+ . n))
-              (define-special-registers (+ 1 (+ . n))
-                (vector regs ... (make-special-register 0 #F validator))
-                set . r)))
-      #;((_ (+ . n) (vector . v) s special . r)
-         (define-special-registers (+ . n) (vector . v) s (special always-true) . r))
-      ((_ _ (vector . regs) set)
-       (define set (vector . regs)))
-      ((_ . r)
-       (define-special-registers (+ 0) (vector) . r))))
+    (syntax-rules ()
+      ((_ set (special validator) ...)
+       (begin (define set (vector (make-special-register 0 #F validator) ...))
+              (define ordered '(special ...))
+              (define special (- (length ordered) (length (memq 'special ordered))))
+              ...))))
 
   (define pointer? register-pointer?)
   (define (non-pointer? r) (not (pointer? r)))
@@ -240,39 +230,24 @@
 
 
   (define-syntax define-operations
-    (syntax-rules (+ vector list)
-      ; No more operation definitions.  Define the tables.
-      ((_ (+ . n)
-          (vector . procs)
-          (list . infos)
-          (proc-table info-table))
-       (begin
-         (define proc-table (vector . procs))
-         (define info-table
-           (let ((ht (make-eq-hashtable (+ . n))))
-             (for-each (lambda (x) (hashtable-set! ht (operation-info-symbol x) x))
-                       (list . infos))
-             ht))))
-      ; Parse an operation definition.  Recur to continue.
-      ((_ (+ . n)
-          (vector procs ...)
-          (list infos ...)
-          (pt it)
+    (syntax-rules ()
+      ((_ (proc-table info-table)
           ((op-sym (operand bitsize pred) ...) . body)
-          . r)
-       (define-operations (+ 1 (+ . n))
-                          (vector procs ...
-                                  (make-operation-proc '(bitsize ...)
-                                    (lambda (operand ...) . body)))
-                          (list infos ...
-                                (make-operation-info 'op-sym (+ . n)
-                                                     '(bitsize ...)
-                                                     (list pred ...)))
-                          (pt it) . r))
-      ; Entry.
-      ((_ (pt it) ((s (o bs pr) ...) . b) ...)
-       (define-operations (+ 0) (vector) (list)
-                          (pt it) ((s (o bs pr) ...) . b) ...))))
+          ...)
+       (begin (define proc-table
+                (vector (make-operation-proc '(bitsize ...)
+                          (lambda (operand ...) . body))
+                        ...))
+              (define info-table
+                (let ((ht (make-eq-hashtable (length '(op-sym ...)))))
+                  (do ((i 0 (+ 1 i))
+                       (s '(op-sym ...)               (cdr s))
+                       (b '((bitsize ...) ...)        (cdr b))
+                       (p (list (list pred ...) ...)  (cdr p)))
+                      ((null? s))
+                    (hashtable-set! ht (car s)
+                      (make-operation-info (car s) i (car b) (car p))))
+                  ht))))))
 
 
   (define-operations (operations-table operations-infos)
