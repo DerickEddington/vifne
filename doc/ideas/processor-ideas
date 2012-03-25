@@ -59,8 +59,6 @@ Instruction Set:
 
 - chunk-set! : (opcode, chunk, selection, group)
 
-    TODO: Increment refcounts when setting pointers.
-
     opcode: is the unique 16-bit code for the operation;
 
     chunk: is a 16-bit register number indicating a register whose value is a

@@ -4,7 +4,7 @@
 
 ; This library provides the bindings that the high-level assembly language is
 ; based on.  TODO: more about how it works.  TODO: Explain why it's designed as
-; it is... eval barriers, multiple vs. singe instantiation of libraries,
+; it is... eval barriers, multiple vs. single instantiation of libraries,
 ; supporting as much general use of Scheme including bindings control,
 ; multi-threading unsafety, etc.
 

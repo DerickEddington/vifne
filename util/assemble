@@ -1,8 +1,8 @@
 #! /usr/bin/env scheme-script
 
 #!r6rs
-;; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
-;; LICENSE from the original collection this file is distributed with.
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
 
 ; This program compiles assembly language of the emulated computer, and stores
 ; the compiled code in new chunks in an emulator storage file.  It can compile

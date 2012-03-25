@@ -22,8 +22,6 @@
     (rnrs arithmetic bitwise)
     (rnrs eval)
     (rnrs exceptions)
-    ; TODO: Review the imported Vifne libraries regarding their instantiation
-    ; and initialization.
     (vifne config)
     (only (vifne storage) valid-id?)
     (vifne processor)

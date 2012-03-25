@@ -196,10 +196,11 @@
              (list f p)))))
 
   (define (store-chunk! id f p)
-    ; Copy a chunk to shared storage.  Assume the chunk is not guard tagged,
-    ; because TODO: remember why.
+    ; Copy a chunk to shared storage.
     (define (ptr? i) (if (vector-ref p i) 1 0))
     (let ((m (id->ptr id)))
+      ; The destination must not be guard tagged, because guarded chunks must
+      ; not have copies outside shared storage.
       (assert (not (tagged? m guard-tag)))
       (do ((i 0 (+ 1 i))
            (ptrs 0 (bitwise-copy-bit ptrs i (ptr? i))))
