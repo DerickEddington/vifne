@@ -10,6 +10,7 @@
     start-emulator!)
   (import
     (rnrs base)
+    (rnrs control)
     (rnrs programs)
     (rnrs exceptions)
     (rnrs conditions)
@@ -60,12 +61,20 @@
                   (cons (string-append "processor" (number->string n)) proc-mqs))
             (begin
               ; TODO?: Setup the text input device stuff?
-              ; Return the procedure that stops the emulator.
+              ; Return the procedure that waits for the emulator to stop.
               (lambda ()
-                (for-each (lambda (c) (ignore-error (kill c SIGTERM)))
-                          (cons sc-pid proc-pids))
-                (for-each (lambda (mq) (ignore-error (destroy-message-queue mq)))
-                          (cons sc-mq proc-mqs))
-                (ignore-error (clean-up)))))))))
+                (define (stop!)
+                  (for-each (lambda (c) (ignore-error (kill c SIGTERM)))
+                            (cons sc-pid proc-pids))
+                  (for-each (lambda (mq) (ignore-error (destroy-message-queue mq)))
+                            (cons sc-mq proc-mqs))
+                  (ignore-error (clean-up)))
+                (let-values (((wpid wstatus) (wait)))
+                  (stop!)
+                  (unless (and (= sc-pid wpid) (zero? wstatus))
+                    (error #F (string-append
+                               (if (= sc-pid wpid) "storage-controller" "processor")
+                               " process terminated abnormally")
+                           wpid wstatus))))))))))
 
 )

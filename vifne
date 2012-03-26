@@ -28,7 +28,8 @@
                          #F))
 
 
-(define stop-emulator! (start-emulator! storage-file
-                                        initialize-storage-file?
-                                        number-processors))
-(stop-emulator!)
+(define wait-stop
+  (start-emulator! storage-file
+                   initialize-storage-file?
+                   number-processors))
+(wait-stop)

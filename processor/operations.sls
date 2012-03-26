@@ -132,10 +132,9 @@
      (let-values (((r _) (group-select dest-grp grp-sel)))
        (register-value-set! (sr II)
          (fold-left (lambda (i r)
-                      (let ((i (+ 1 i)))
-                        (let-values (((v p?) (inst-array-ref (srv IS) i)))
-                          (r-set! r v p? #T))
-                        i))
+                      (let-values (((v p?) (inst-array-ref (srv IS) i)))
+                        (r-set! r v p? #T))
+                      (+ 1 i))
                     (srv II) r))))
 
 

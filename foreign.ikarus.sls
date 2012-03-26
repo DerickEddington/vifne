@@ -18,7 +18,8 @@
     NULL
     memcpy
     pointer-ref-u64
-    pointer-set-u64!)
+    pointer-set-u64!
+    pointer-ref-s32)
   (import
     (rnrs base)
     (rnrs io ports)
@@ -67,5 +68,6 @@
 
   (define (pointer-ref-u64 p i) (pointer-ref-c-unsigned-long-long p (* 8 i)))
   (define (pointer-set-u64! p i v) (pointer-set-c-long-long! p (* 8 i) v))
+  (define (pointer-ref-s32 p i) (pointer-ref-c-signed-int p (* 4 i)))
 
 )

@@ -13,6 +13,7 @@
     fork
     sleep
     kill
+    wait
     malloc
     free
     error/errno
@@ -64,6 +65,17 @@
                             signed-int))  ; returns int
 
   (define (kill pid sig) (unless (zero? (kill-raw pid sig)) (error/errno 'kill pid sig)))
+
+
+  (define wait-raw (foreign ("wait" pointer) signed-int))  ; returns pid_t
+
+  (define (wait)
+    (let* ((status* (malloc 4))  ; sizeof(int) = 4 is portable enough, right?
+           (pid (wait-raw status*))
+           (status (pointer-ref-s32 status* 0)))
+      (free status*)
+      (when (negative? pid) (error/errno 'wait))
+      (values pid status)))
 
 
   (define malloc-raw (foreign ("malloc" unsigned-long)  ; size_t  size

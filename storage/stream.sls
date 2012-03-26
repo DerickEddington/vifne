@@ -82,11 +82,11 @@
               (let ((c (alloc-chunk! elements-tags 0))) ; Ref-count incremented below.
                 (if c
                   (begin (set-elem! c 0)
-                         (set-word! c next-elements-field 0) ; (set-field! unnecessary.)
+                         (set-word! (id->ptr c) next-elements-field 0)
                          (set-field! s tail-elements-field c #T)
                          (set-word! s tail-index-field 1)
                          (if (positive? te)
-                           (set-field! te next-elements-field c #T)
+                           (set-field! (id->ptr te) next-elements-field c #T)
                            (begin (assert (zero? (ref-word s head-elements-field)))
                                   (set-field! s head-elements-field c #T)
                                   (set-word! s head-index-field 0)))
@@ -103,9 +103,9 @@
                 (i (ref-word s head-index-field)))
             (if (positive? he)
               ; There is an available element.
-              (let-values (((val ptr?) (ref-field he i)))
+              (let-values (((val ptr?) (ref-field (id->ptr he) i)))
                 (when ptr? (incr-refcount! val)) ; Because it's returned.
-                (set-field! he i 0 #F)
+                (set-field! (id->ptr he) i 0 #F)
                 (let ((i (+ 1 i))
                       (te (ref-word s tail-elements-field)))
                   (if (and (< i next-elements-field)
@@ -114,7 +114,7 @@
                     (set-word! s head-index-field i)
                     ; No more elements in what was the head chunk.  Move the
                     ; head to the next chunk.
-                    (let ((n (ref-word he next-elements-field)))
+                    (let ((n (ref-word (id->ptr he) next-elements-field)))
                       (if (positive? n)
                         (begin (not (assert (= te he)))
                                (set-field! s head-elements-field n #T)

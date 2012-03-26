@@ -1,0 +1,31 @@
+; Simple test to run when the emulator starts a storage file.
+
+(import (vifne util assembler high-lang)
+        (rnrs))
+
+(define g0-all (group r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 rA rB rC rD rE rF))
+
+(fold-left (lambda (i r)
+             (set-immediate r i)
+             (+ 7 i))
+           17 g0-all)
+(chunk-create r10 g0-all)
+
+(set-multiple-immediates (group r11 r13))
+(chunk 12345 (chunk 9) 987)
+(chunk-create r21 (group)) ; Data for set-multiple-immediates. Not executed.
+
+(chunk-create r20 (group r10 r11 r13))
+
+(chunk-get (group r37 r3D) r10)
+(sub r30 r3D r37)
+(jump-positive r30 'skip)
+(chunk-create r40 (group)) ; Skipped.
+(label 'skip)
+
+(let ((counter r47) (one r69))
+  (set-immediate one 1)
+  (set-immediate counter #e1e7)
+  (label 'loop)
+  (sub counter counter one)
+  (jump-positive counter 'loop))

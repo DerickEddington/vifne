@@ -73,17 +73,17 @@
     (send* `(stream-get ,startup-tasks-head-id #F))
     (let ((x (receive*)))
       (if (list? x)
-        (begin (assert (cadr x)) ; ptr? is true
+        (begin (assert (caddr x)) ; ptr? is true
                ; Set the Instruction Segment register to point to the
                ; instruction segment gotten from the stream, but don't increment
                ; the reference count because stream-get already incremented it.
-               (set-register! (sr IS) (car x) #T #F)
+               (set-register! (sr IS) (cadr x) #T #F)
                ;(register-value-set! (sr II) 0)  Already initialized.
                (instruction-interpreter))
         (begin (assert (eq? 'stream-empty x))
                ; TODO?: Wait for tasks to become available via stealing from
                ; another processor's PTQ or from the global DTQ.
-               ))))
+               (sleep (expt 2 32))))))
 
 
   (define (instruction-interpreter)
@@ -96,9 +96,9 @@
     (assert (srp? IS))
     (assert (not (srp? II)))
     (let ((id (srv IS)) (i (srv II)))
+      (register-value-set! (sr II) (+ 1 i))
       (guard (ex #;((processor-exception? ex) TODO))
         (do-operation (get-inst id i))))
-    (register-value-set! (sr II) (+ 1 (srv II)))
     (instruction-interpreter))
 
   ;-----------------------------------------------------------------------------

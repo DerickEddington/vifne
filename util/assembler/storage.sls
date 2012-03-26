@@ -8,7 +8,7 @@
 ; including the ability to bypass capability-security with magic pointers.
 
 ; NOTE: Usage of this library requires that the (vifne storage) library already
-; have been initialized.
+; have been initialized, and requires that the emulator is not running.
 
 (library (vifne util assembler storage)
   (export
