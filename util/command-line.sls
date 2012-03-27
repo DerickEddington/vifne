@@ -6,8 +6,7 @@
 
 (library (vifne util command-line)
   (export
-    process-command-line!
-    command-line-argument
+    define-command-line-arguments
     string-non-empty?
     true-string?)
   (import
@@ -17,32 +16,26 @@
 
   (define (die msg . a) (apply error (car (command-line)) msg a))
 
-  (define processed #F)
-
-  (define (process-command-line! . args-names)
-    (set! processed
-          (let loop ((c (cdr (command-line)))
-                     (a '())
-                     (r '()))
-            (if (null? c)
-              (if (null? r)
+  (define (process-command-line . args-names)
+    (let loop ((c (cdr (command-line))) (a '()) (r '()))
+      (if (null? c)
+        (if (null? r)
+          a
+          (cons (cons 'rest (reverse r))
+                a))
+        (if (member (car c) args-names)
+          (if (null? (cdr c))
+            (die "argument missing value" (car c))
+            (loop (cddr c)
+                  (cons (cons (car c) (cadr c))
+                        a)
+                  r))
+          (loop (cdr c)
                 a
-                (cons (cons 'rest (reverse r))
-                      a))
-              (if (member (car c) args-names)
-                (if (null? (cdr c))
-                  (die "argument missing value" (car c))
-                  (loop (cddr c)
-                        (cons (cons (car c) (cadr c))
-                              a)
-                        r))
-                (loop (cdr c)
-                      a
-                      (cons (car c) r)))))))
+                (cons (car c) r))))))
 
 
-  (define (get name valid? default . funcs)
-    (assert processed)
+  (define (get processed name valid? default . funcs)
     (cond
       ((assoc name processed)
        => (lambda (p)
@@ -53,10 +46,14 @@
       (else
        (default))))
 
-  (define-syntax command-line-argument
+
+  (define-syntax define-command-line-arguments
     (syntax-rules ()
-      ((_ name (f ...) pred default)
-       (get name pred (lambda () default) f ...))))
+      ((_ (name arg (f ...) pred default) ...)
+       (begin
+         (define processed (process-command-line 'arg ...))
+         (define name (get processed 'arg pred (lambda () default) f ...))
+         ...))))
 
 
   (define (string-non-empty? x) (positive? (string-length x)))

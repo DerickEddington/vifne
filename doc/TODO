@@ -1,6 +1,3 @@
-Change command-line library to not use library state, but instead return object
-to pass to command-line-arguments helpers.
-
 Use dup2 (and open) to change the forked processes' output FILEs to files
 particular to each process.
 

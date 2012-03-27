@@ -29,30 +29,26 @@
   (display "#x") (display (number->string n 16)) (newline))
 
 
-(process-command-line! "-l" "-f" "--magic")
+(define-command-line-arguments
 
-(define language-level
-  (command-line-argument "-l"
-                         (string->symbol) (lambda (s) (memq s '(low high)))
-                         'high))
+  (language-level "-l"
+                  (string->symbol) (lambda (s) (memq s '(low high)))
+                  'high)
 
-(define storage-file
-  (command-line-argument "-f"
-                         () string-non-empty?
-                         default-storage-file))
+  (storage-file "-f"
+                () string-non-empty?
+                default-storage-file)
 
-(define magic?
   ; If this is enabled, the assembler allows synthesizing pointers from numbers,
   ; which bypasses capability-security, which sometimes is necessary for
   ; manually constructing a system to run in the emulator.
-  (command-line-argument "--magic"
-                         (true-string?) boolean?
-                         #F))
+  (magic? "--magic"
+          (true-string?) boolean?
+          #F)
 
-(define input
-  (command-line-argument 'rest
-                         (car open-input-file) values
-                         (current-input-port)))
+  (input rest
+         (car open-input-file) values
+         (current-input-port)))
 
 
 (define clean-up (initialize-libraries! storage-file #F))

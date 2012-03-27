@@ -10,23 +10,19 @@
         (vifne host)
         (vifne util command-line))
 
-(process-command-line! "-f" "-n" "-i")
+(define-command-line-arguments
 
-(define storage-file
-  (command-line-argument "-f"
-                         () string-non-empty?
-                         default-storage-file))
+  (storage-file "-f"
+                () string-non-empty?
+                default-storage-file)
 
-(define number-processors
-  (command-line-argument "-n"
-                         (string->number) exact-positive-integer?
-                         (number-host-processors)))
+  (number-processors "-n"
+                     (string->number) exact-positive-integer?
+                     (number-host-processors))
 
-(define initialize-storage-file?
-  (command-line-argument "-i"
-                         (true-string?) boolean?
-                         #F))
-
+  (initialize-storage-file? "-i"
+                            (true-string?) boolean?
+                            #F))
 
 (define wait-stop
   (start-emulator! storage-file
