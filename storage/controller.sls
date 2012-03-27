@@ -16,10 +16,13 @@
     (vifne message-queue)
     (vifne storage)
     (vifne storage stream)
+    (vifne posix redirect)
     (vifne log))
 
   (define (start-storage-controller num-procs)
-    (set! requests (create-message-queue "storage-controller"))
+    (define name "storage-controller")
+    (redirect-stdouts name)
+    (set! requests (create-message-queue name))
     (set! processors (make-vector num-procs #F))
     (controller-loop))
 

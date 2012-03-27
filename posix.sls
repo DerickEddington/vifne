@@ -8,6 +8,7 @@
     munmap
     open
     close
+    dup2
     file-size
     getpid
     fork
@@ -135,5 +136,15 @@
                              signed-int))  ; returns int
 
   (define (close fd) (unless (zero? (close-raw fd)) (error/errno 'close fd)))
+
+
+  (define dup2-raw (foreign ("dup2" signed-int   ; int  oldfd
+                                    signed-int)  ; int  newfd
+                            signed-int))  ; returns int
+
+  (define (dup2 old new)
+    (let ((fd (dup2-raw old new)))
+      (when (negative? fd) (error/errno 'dup2 old new))
+      fd))
 
 )

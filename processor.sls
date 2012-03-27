@@ -18,6 +18,7 @@
     (rnrs conditions)
     (vifne config)
     (vifne posix)
+    (vifne posix redirect)
     (vifne message-queue)
     (vifne processor array)
     (vifne processor cache)
@@ -39,8 +40,10 @@
 
     ; Create this processor's message queue for replies from the storage
     ; controller.
-    (define rmqn (string-append "processor" (number->string n)))
-    (set! replies (create-message-queue rmqn))
+    (define name (string-append "processor" (number->string n)))
+    (redirect-stdouts name)
+
+    (set! replies (create-message-queue name))
 
     ; If the storage controller process has not created its message queue yet,
     ; wait a second and try again.
@@ -53,7 +56,7 @@
         (set! storage (open-message-queue "storage-controller"))))
 
     ; Register with the storage controller.
-    (send storage `(processor ,rmqn))
+    (send storage `(processor ,name))
     ; Get the ID the storage controller assigned to this processor.
     (set! sid (cadr (receive*)))
 

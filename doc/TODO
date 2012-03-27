@@ -1,6 +1,3 @@
-Use dup2 (and open) to change the forked processes' output FILEs to files
-particular to each process.
-
 Test emulator using multiple processors/processes, by putting multiple
 procedures in the startup-tasks-stream.
 
