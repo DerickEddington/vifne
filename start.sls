@@ -15,6 +15,7 @@
     (rnrs exceptions)
     (rnrs conditions)
     (vifne posix)
+    (vifne main-pid)
     (vifne storage)
     (vifne storage stream)
     (vifne storage controller)
@@ -44,7 +45,7 @@
     (let* ((size (file-size storage-file))
            (addr (mmap-storage-file storage-file size)))
       (storage-set! addr size init-file? alloc-stream!)
-      (PID-set! (getpid))
+      (main-pid-set! (getpid))
       ; Return the procedure that cleans-up the initialization.
       (lambda () (munmap addr size))))
 

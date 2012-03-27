@@ -26,7 +26,9 @@
     (vifne processor registers)
     (vifne processor cache)
     (vifne processor array)
-    (vifne processor exception))
+    (vifne processor exception)
+    (vifne log)
+    (only (vifne posix) getpid))
 
   (define operation-code-bitsize 16)
 
@@ -67,7 +69,9 @@
           ...)
        (begin (define proc-table
                 (vector (make-operation-proc '(bitsize ...)
-                          (lambda (operand ...) . body))
+                          (lambda (operand ...)
+                            (debug `(op-sym (operand ,operand) ...))
+                            (let () . body)))
                         ...))
               (define info-table
                 (let ((ht (make-eq-hashtable (length '(op-sym ...)))))
@@ -228,6 +232,10 @@
   (define (operations:set-storage-comm! sender receiver)
     (set! send* sender)
     (set! receive* receiver))
+
+  ;-----------------------------------------------------------------------------
+
+  (define-logger debug processor-operations (number->string (getpid)))
 
   ;-----------------------------------------------------------------------------
 

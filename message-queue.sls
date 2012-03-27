@@ -10,24 +10,21 @@
     open-message-queue
     destroy-message-queue
     send
-    receive
-    PID-set!)
+    receive)
   (import
     (rnrs base)
     (rnrs records syntactic)
     (rnrs io ports)
     (rnrs bytevectors)
     (vifne host)
+    (vifne main-pid)
     (vifne posix message-queue)
     (vifne posix)
     (vifne foreign))
 
   (define-record-type message-queue (fields name descriptor buffer))
 
-  (define PID)
-  (define (PID-set! x) (set! PID (number->string x)))
-
-  (define (fmt s) (string-append "/vifne-" PID "-" s))
+  (define (fmt s) (string-append "/vifne-" (main-pid-str) "-" s))
 
   (define buffer-length (message-queue-msgsize_max))
 

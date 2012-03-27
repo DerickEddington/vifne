@@ -15,7 +15,8 @@
     (rnrs control)
     (vifne message-queue)
     (vifne storage)
-    (vifne storage stream))
+    (vifne storage stream)
+    (vifne log))
 
   (define (start-storage-controller num-procs)
     (set! requests (create-message-queue "storage-controller"))
@@ -34,16 +35,23 @@
   (define (proc-mq i) (vector-ref processors i))
 
 
+  (define-logger debug storage-controller)
+
+  (define (send* mq x) (debug 'S: x) (send mq x))
+
+
   (define (controller-loop)
     (let ((req (receive requests)))
 
-      (define (reply x) (send (proc-mq (cadr req)) x))
+      (define (reply x) (send* (proc-mq (cadr req)) x))
+
+      (debug 'R: req)
 
       (case (car req)
 
         ((processor)
          (let ((mq (open-message-queue (cadr req))))
-           (send mq `(processor-id ,(register-proc-mq! mq)))))
+           (send* mq `(processor-id ,(register-proc-mq! mq)))))
 
         ((allocate)
          (let loop ((count (caddr req)) (a '()))

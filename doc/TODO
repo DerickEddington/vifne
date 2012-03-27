@@ -1,3 +1,12 @@
+Change command-line library to not use library state, but instead return object
+to pass to command-line-arguments helpers.
+
+Use dup2 (and open) to change the forked processes' output FILEs to files
+particular to each process.
+
+Test emulator using multiple processors/processes, by putting multiple
+procedures in the startup-tasks-stream.
+
 Need to carefully analyze reference counting to prove it all correct.
 
 It seems possible to create a reference cycle by putting in a stream a chunk
