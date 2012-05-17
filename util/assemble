@@ -39,6 +39,10 @@
                 () string-non-empty?
                 default-storage-file)
 
+  (initialize-storage-file? "-i"
+                            (true-string?) boolean?
+                            #F)
+
   ; If this is enabled, the assembler allows synthesizing pointers from numbers,
   ; which bypasses capability-security, which sometimes is necessary for
   ; manually constructing a system to run in the emulator.
@@ -51,7 +55,7 @@
          (current-input-port)))
 
 
-(define clean-up (initialize-libraries! storage-file #F))
+(define clean-up (initialize-libraries! storage-file initialize-storage-file?))
 
 ; Print the chunk ID of the new graph in the mmap'ed storage file, so it can be
 ; used in some other assembly (e.g. via pointer magic).
