@@ -1,0 +1,86 @@
+#! /usr/bin/env scheme-script
+
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+; This program prints a hexadecimal dump of a chunk storage file.
+
+(import (rnrs base)
+        (rnrs control)
+        (rnrs lists)
+        (rnrs io simple)
+        (rnrs bytevectors)
+        (vifne util command-line)
+        (vifne config)
+        (vifne start)
+        (vifne storage)
+        (vifne foreign)
+        (vifne posix))
+
+(define-command-line-arguments
+  (input "-f"
+         () string-non-empty?
+         default-storage-file))
+
+
+(define storage-addr)
+(define (ptr id) (integer->pointer (+ storage-addr id)))
+
+
+(define (print-chunk id)
+
+  (define columns 4)
+
+  (define (ident)
+    (list (number->string id 16) "(" (/ id chunk&meta-size) ")"))
+
+  (define (refs)
+    (let ((x (ref-word (ptr id) reference-count-field)))
+      (if (positive? x) (list " refs:" x) '())))
+
+  (define (tags)
+    (let ((x (map cadr (filter (lambda (x) (tagged? (ptr id) (car x)))
+                               `((,guard-tag       "G")
+                                 (,stream-head-tag "H")
+                                 (,stream-tail-tag "T"))))))
+      (if (pair? x) (cons " tags:" x) '())))
+
+  (define (pad s width c)
+    (string-append (make-string (- width (string-length s)) c)
+                   s))
+
+  (define (word i)
+    (let-values (((v p?) (ref-field (ptr id) i)))
+      (list (pad (number->string v 16)
+                 (* 2 word-size) ; Two hex chars per byte.
+                 #\space)
+            (if p? ",P " "   "))))
+
+  (define offset-width (string-length (number->string chunk-wsz 16)))
+
+  (assert (integer? (/ chunk-wsz columns)))
+
+  (for-each display `("Chunk:" ,@(ident) ,@(refs) ,@(tags) "\n"))
+  (do ((i 0 (+ columns i)))
+      ((= chunk-wsz i))
+    (for-each display `("  " ,(pad (number->string i 16) offset-width #\space)
+                        ":  " ,@(word i) ,@(word (+ 1 i))
+                        ,@(word (+ 2 i)) ,@(word (+ 3 i)) "\n"))))
+
+
+(let-values (((addr size) (mmap-storage-file input)))
+  (set! storage-addr (pointer->integer addr)) ; (R6RS should've had define-values ...)
+
+  (let ((bv (make-bytevector chunk&meta-size)))
+    (let loop ((c 0) (prevs-equal? #F) (prev-bv #F))
+      (when (< c size)
+        (memcpy bv 0 (ptr c) 0 chunk&meta-size)
+        (let ((e? (equal? prev-bv bv)))
+          (if e?
+            (unless prevs-equal? (display "*\n"))
+            (print-chunk c))
+          (loop (+ chunk&meta-size c) e? (bytevector-copy bv)))))
+    (for-each display (list "Total size: " size " (" (/ size chunk&meta-size) ")\n")))
+
+  (munmap addr size))

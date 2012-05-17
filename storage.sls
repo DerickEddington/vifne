@@ -8,6 +8,8 @@
 
 (library (vifne storage)
   (export
+    chunk&meta-size
+    reference-count-field
     guard-tag
     stream-head-tag
     stream-tail-tag

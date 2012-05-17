@@ -6,6 +6,7 @@
 
 (library (vifne start)
   (export
+    mmap-storage-file
     initialize-libraries!
     start-emulator!)
   (import
@@ -22,11 +23,12 @@
     (vifne processor)
     (vifne message-queue))
 
-  (define (mmap-storage-file file size)
+  (define (mmap-storage-file file)
     (let* ((fd (open file O_RDWR))
+           (size (file-size file))
            (p (mmap NULL size (+ PROT_READ PROT_WRITE) MAP_SHARED fd 0)))
       (close fd)
-      p))
+      (values p size)))
 
   (define-syntax fork*
     (syntax-rules ()
@@ -42,8 +44,7 @@
        (guard (ex ((error? ex))) expr ...))))
 
   (define (initialize-libraries! storage-file init-file?)
-    (let* ((size (file-size storage-file))
-           (addr (mmap-storage-file storage-file size)))
+    (let-values (((addr size) (mmap-storage-file storage-file)))
       (storage-set! addr size init-file? alloc-stream!)
       (main-pid-set! (getpid))
       ; Return the procedure that cleans-up the initialization.
