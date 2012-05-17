@@ -1,3 +1,16 @@
+Write document describing how to manually initialize a storage file for running
+the tests.  Need to remember how to do this.
+
+Add register-setting instructions/operations that designate the register with a
+register group (i.e. any register in the group) and an index in that group.
+E.g.: (copy group7 4 r35).  This will allow loops that work on consecutive chunk
+fields to use a loop index variable to refer to the registers.  Otherwise such
+loops will have to be unrolled so that the required registers can be specified.
+
+Investigate changing all null-pointer tests to check fields' is-pointer flag,
+instead of checking for zero value.  Null-pointer will be indicated by not
+setting the flag.  This seems cleaner.
+
 Test emulator using multiple processors/processes, by putting multiple
 procedures in the startup-tasks-stream.
 

@@ -74,6 +74,9 @@
                   (stop!)
                   (unless (and (= sc-pid wpid) (zero? wstatus))
                     (error #F (string-append
+                               ; TODO: Identify what processor process terminated
+                               ; abnormally, in a way that can support future other types
+                               ; of processes too.
                                (if (= sc-pid wpid) "storage-controller" "processor")
                                " process terminated abnormally")
                            wpid wstatus))))))))))

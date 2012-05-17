@@ -1,0 +1,19 @@
+To interactively / dynamically program the emulator while it's running, without
+needing to implement an I/O devices subsystem:
+
+- Boot emulator with procedure that loops getting from a stream.  The stream
+  gives procedures to execute.  Maybe in the future these procedures will be
+  sent to other processors.
+
+- Injector registers with the storage controller as a process, so it can use the
+  storage controller.
+
+- Injector takes object, not yet sure if assembly lang datum or chunk record
+  graph or what, and puts it in the stream the booted procedure gets from, maybe
+  after compiling the object.  Thus injecting a dynamically created procedure to run.
+
+- vifne program has new command-line arg to enable the injector.
+
+This is just a hack, to eventually be replaced by an I/O devices subsystem along
+with an emulated keyboard and display that are used by some software to provide
+a console for interaction with users.

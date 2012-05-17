@@ -38,15 +38,15 @@
 
   (define (start-processor n sth stt)
 
+    (define name (string-append "processor" (number->string n)))
+    (redirect-stdouts name) ; Redirect output before doing anything.
+
     ; Create this processor's message queue for replies from the storage
     ; controller.
-    (define name (string-append "processor" (number->string n)))
-    (redirect-stdouts name)
-
     (set! replies (create-message-queue name))
 
     ; If the storage controller process has not created its message queue yet,
-    ; wait a second and try again.
+    ; wait a second and try again up to 5 times.
     (let retry ((max 5))
       (unless (positive? max)
         (error 'start-processor "storage-controller queue does not exist"))
