@@ -86,7 +86,7 @@
         (begin (assert (eq? 'stream-empty x))
                ; TODO?: Wait for tasks to become available via stealing from
                ; another processor's PTQ or from the global DTQ.
-               (sleep (expt 2 32))))))
+               (sleep (expt 2 30))))))
 
 
   (define (instruction-interpreter)
