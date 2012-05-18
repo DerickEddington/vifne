@@ -4,6 +4,13 @@
 
 ; This library TODO
 
+; TODO: Comments about how if last element is gotten from a stream, the
+; tail-index-field of a stream-chunk might be left with an old inconsistent
+; value, but this is alright because the nullness of tail-elements-field is what
+; matters.  This design choice is made to minimize the amount of operations, for
+; performance.  Should add commented-out expression that resets
+; tail-index-field.
+
 (library (vifne storage stream)
   (export
     alloc-stream!

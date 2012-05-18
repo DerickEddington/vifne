@@ -138,6 +138,8 @@
                                                             #|deferred-tasks-head-field
                                                             deferred-tasks-tail-field|#)))
     (define (die msg) (error 'check-storage! msg))
+    (assert (< control-struct-size storage-size))
+    (assert (integer? (/ storage-size chunk&meta-size)))
     (if (positive? (free-list))
       (when init? (die "already initialized"))
       (if init?
@@ -164,7 +166,7 @@
                 (set-word! m reference-count-field refc)
                 (set-word! m tags-field tags)
                 (set-word! m pointer-flags-field 0)
-                #;(set-word! m next-free-field 0)
+                #;(set-word! m next-free-field 0) ; Not necessary.
                 id))))
       ((tags) (alloc-chunk! tags 1))
       (() (alloc-chunk! 0 1))))
@@ -182,6 +184,7 @@
 
   (define (adjust-refcount! n p)
     (let ((c (+ n (ref-word p reference-count-field))))
+      (assert (non-negative-word-integer? c))
       (set-word! p reference-count-field c)
       c))
 
