@@ -67,10 +67,11 @@
         (when p? (incr-refcount! v))
         (when oldp? (decr-refcount! oldv)))))
 
-  (define (tagged? c bitpos) (bitwise-bit-set? (ref-word c tags-field) bitpos))
-
-  (define (tags . bitsposs)
+  (define (bitset . bitsposs)
     (apply bitwise-ior (map (lambda (bp) (bitwise-arithmetic-shift 1 bp)) bitsposs)))
+
+  (define (tagged? c bitpos) (bitwise-bit-set? (ref-word c tags-field) bitpos))
+  (define tags bitset)
 
 
   (define storage-addr)
@@ -92,10 +93,6 @@
     (and (non-negative-word-integer? x) (zero? (mod x chunk&meta-size))))
 
 
-  ; TODO?: Should the control chunk use its meta chunk like a normal chunk?
-  ; I.e. set its ref-count to 1, guard tagged, pointer flags used, next-free
-  ; ignored.  This might be useful for future use of the control chunk?
-
   (define control-struct)  ; Set by storage-set! above.
   (define control-struct-size (* 1 chunk&meta-size))
   (define control-struct-wsz 5)
@@ -114,21 +111,39 @@
   (define (deferred-tasks-tail) (ref-word control-struct deferred-tasks-tail-field))|#
 
   (define (check-storage! init? alloc-stream!)
+    (define (initialize!)
+      ; Make the chunk following the control struct be the first free chunk.
+      (free-list-set! control-struct-size)
+      ; Setup the startup-tasks stream (TODO?: and the deferred-tasks stream).
+      (let ((s-h&t (alloc-stream!))
+            #;(d-h&t (alloc-stream!)))
+        (assert (and s-h&t #;d-h&t))
+        (set-word! control-struct startup-tasks-head-field (car s-h&t))
+        (set-word! control-struct startup-tasks-tail-field (cadr s-h&t))
+        #|(set-word! control-struct deferred-tasks-head-field (car d-h&t))
+        (set-word! control-struct deferred-tasks-tail-field (cadr d-h&t))|#)
+      ; Setup the meta fields of the control-struct chunk, to look like a normal
+      ; chunk.  This isn't necessary, but it makes the control-struct chunk look
+      ; consistent with other chunks in storage-file print-outs, and it might be
+      ; useful for the future if the control struct is ever accessed like a
+      ; normal chunk.  Note that free-list-field being marked as a pointer does
+      ; not contribute to the reference count of the chunk it points to, but
+      ; startup-tasks-head-field and startup-tasks-tail-field being marked does
+      ; contribute to the count of the chunks they point to.
+      (set-word! control-struct reference-count-field 1)
+      (set-word! control-struct tags-field (tags guard-tag))
+      (set-word! control-struct pointer-flags-field (bitset free-list-field
+                                                            startup-tasks-head-field
+                                                            startup-tasks-tail-field
+                                                            #|deferred-tasks-head-field
+                                                            deferred-tasks-tail-field|#)))
     (define (die msg) (error 'check-storage! msg))
     (if (positive? (free-list))
       (when init? (die "already initialized"))
       (if init?
         ; Initialize the storage.  Should be done only once per file.  The
-        ; storage should be all zeros.  Make the chunk following the control
-        ; struct be the first free chunk.
-        (begin (free-list-set! control-struct-size)
-               (let ((s-h&t (alloc-stream!))
-                     #;(d-h&t (alloc-stream!)))
-                 (assert (and s-h&t #;d-h&t))
-                 (set-word! control-struct startup-tasks-head-field (car s-h&t))
-                 (set-word! control-struct startup-tasks-tail-field (cadr s-h&t))
-                 #|(set-word! control-struct deferred-tasks-head-field (car d-h&t))
-                 (set-word! control-struct deferred-tasks-tail-field (cadr d-h&t))|#))
+        ; storage should be all zeros before being initialized.
+        (initialize!)
         (die "uninitialized storage"))))
 
 
