@@ -7,6 +7,7 @@
 (library (vifne util command-line)
   (export
     define-command-line-arguments
+    required-argument-error
     string-non-empty?
     true-string?)
   (import
@@ -54,6 +55,10 @@
          (define processed (process-command-line 'arg ...))
          (define name (get processed 'arg pred (lambda () default) f ...))
          ...))))
+
+
+  (define (required-argument-error name)
+    (die "missing required argument" name))
 
 
   (define (string-non-empty? x) (positive? (string-length x)))

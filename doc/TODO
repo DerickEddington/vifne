@@ -1,6 +1,3 @@
-Write document describing how to manually initialize a storage file for running
-the tests.  Need to remember how to do this.
-
 Add register-setting instructions/operations that designate the register with a
 register group (i.e. any register in the group) and an index in that group.
 E.g.: (copy group7 4 r35).  This will allow loops that work on consecutive chunk

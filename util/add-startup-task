@@ -1,0 +1,33 @@
+#! /usr/bin/env scheme-script
+
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+; This program is a command-line interface to add-startup-task!.  Even though
+; util/assemble can add to a startup-tasks stream, this program is useful for
+; adding something that hasn't just been assembled.
+
+(import (rnrs base)
+        (vifne util startup-tasks)
+        (vifne util command-line)
+        (vifne start)
+        (vifne config)
+        (vifne storage))
+
+(define-command-line-arguments
+  (storage-file "-f"
+                () string-non-empty?
+                default-storage-file)
+  (chunk-id "-c"
+            (string->number) valid-id?
+            (required-argument-error "-c"))
+  (adjustment "-a"
+              (string->number) exact-integer?
+              0))
+
+(define clean-up (initialize-libraries! storage-file #F))
+
+(add-startup-task! chunk-id adjustment)
+
+(clean-up)

@@ -9,10 +9,12 @@
 ; either the high-level or the low-level languages.  TODO more.
 
 (import (rnrs base)
+        (rnrs control)
         (rnrs lists)
         (rnrs io simple)
         (vifne util assembler)
         (vifne util assembler storage)
+        (vifne util startup-tasks)
         (vifne start)
         (vifne config)
         (vifne util command-line))
@@ -43,6 +45,10 @@
                             (true-string?) boolean?
                             #F)
 
+  (add-to-startup-tasks? "-a"
+                         (true-string?) boolean?
+                         #F)
+
   ; If this is enabled, the assembler allows synthesizing pointers from numbers,
   ; which bypasses capability-security, which sometimes is necessary for
   ; manually constructing a system to run in the emulator.
@@ -57,20 +63,31 @@
 
 (define clean-up (initialize-libraries! storage-file initialize-storage-file?))
 
+(define stored-id
+  ; Copy the assembled chunk graph into new chunks in the mmap'ed storage file.
+  (store!
+   ; Assemble an instruction-segment array-tree, or an arbitrary chunk graph,
+   ; represented as Scheme-record chunks.
+   (assemble-low (case language-level
+                   ((high)
+                    (assemble-high (read-all input)))
+                   ((low)
+                    ; Low-level forms must all be in one datum, to distinguish
+                    ; between instruction segment or chunk forms.
+                    (read input)))
+                 magic?)))
+
 ; Print the chunk ID of the new graph in the mmap'ed storage file, so it can be
 ; used in some other assembly (e.g. via pointer magic).
-(print
- ; Copy the assembled chunk graph into new chunks in the mmap'ed storage file.
- (store!
-  ; Assemble an instruction-segment array-tree, or an arbitrary chunk graph,
-  ; represented as Scheme-record chunks.
-  (assemble-low (case language-level
-                  ((high)
-                   (assemble-high (read-all input)))
-                  ((low)
-                   ; Low-level forms must all be in one datum, to distinguish
-                   ; between instruction segment or chunk forms.
-                   (read input)))
-                magic?)))
+(print stored-id)
+
+(when add-to-startup-tasks?
+  ; Put the new chunk graph in the storage file's startup-tasks stream, so it
+  ; will be executed when the emulator is started with the storage file.  Only
+  ; sensible for a chunk graph that is an instruction segment.  The -1 argument
+  ; causes the reference count to be adjusted to the desired 1, which is
+  ; necessary because of the count of 1 that store! gave and the incrementing
+  ; that putting in the stream does, i.e. 1 + 1 - 1 = 1.
+  (add-startup-task! stored-id -1))
 
 (clean-up)
