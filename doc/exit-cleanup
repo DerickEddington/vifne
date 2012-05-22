@@ -1,0 +1,14 @@
+The Vifne emulator requires the Scheme system to provide a facility for
+registering procedures, called exit handlers, to run when a program is going to
+exit, for both normal and abnormal exits.  The emulator uses this facility to
+clean-up its resources when the program exits.
+
+Without this facility, trying to have the emulator clean-up for all possible
+causes of program exit (normal implicit exit, normal explicit exit, raised
+exception causing exit, and Posix signal causing exit) becomes scattered,
+difficult to understand, and not portable because it makes assumptions about how
+handling Posix signals should be done for a Scheme system.
+
+The exit-handlers facility should support running the handlers for all possible
+causes of program exit (except the Posix signal SIGKILL, of course, which can't
+be caught).  Otherwise the emulator's resources won't always be cleaned-up.

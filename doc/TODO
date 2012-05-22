@@ -1,3 +1,5 @@
+Clean-up of processor caches.  Decrement reference counts of all cached chunks.
+
 Add register-setting instructions/operations that designate the register with a
 register group (i.e. any register in the group) and an index in that group.
 E.g.: (copy group7 4 r35).  This will allow loops that work on consecutive chunk

@@ -16,18 +16,22 @@
     (vifne message-queue)
     (vifne storage)
     (vifne storage stream)
-    (vifne posix redirect)
     (vifne log))
 
   (define requests)
   (define processors)
 
+
   (define (start-storage-controller num-procs)
     (define name "storage-controller")
-    (redirect-stdouts name) ; Redirect output before doing anything.
-    (set! requests (create-message-queue name))
-    (set! processors (make-vector num-procs #F))
-    (controller-loop))
+    (define (main)
+      (set! requests (create-message-queue name))
+      (set! processors (make-vector num-procs #F))
+      (controller-loop))
+    (define (after-death)
+      (destroy-message-queue name))
+    (values name main #F after-death))
+
 
   (define (register-proc-mq! mq)
     (do ((i 0 (+ 1 i)))

@@ -24,8 +24,6 @@
                             (true-string?) boolean?
                             #F))
 
-(define wait-stop
-  (start-emulator! storage-file
-                   initialize-storage-file?
-                   number-processors))
-(wait-stop)
+(start-emulator storage-file
+                initialize-storage-file?
+                number-processors)

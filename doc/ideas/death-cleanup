@@ -1,0 +1,69 @@
+Need to redesign the clean-up when the emulator dies.
+
+
+Known ways it can die:
+
+- Running processor reaches the end of the currently executing instruction
+  segment and gets an array out-of-bounds exception.
+
+- Some external resource has an error, like too many message queues.  Usually,
+  one process hits this and causes the whole emulator to die.
+
+- Interrupted by signal.  Sometimes some but not all child processor processes
+  seem to also get the signal sent to the parent process.  The shell sends the
+  signal to all in the job group which includes the children, but I think the
+  parent does its killing of some but not all child processes before they also
+  get the signal.
+
+
+What needs to be cleaned-up:
+
+- Message queues.
+
+- Processor caches.  Cached chunks need to have their refcounts decremented.
+
+- Munmap'ing the storage file.  Maybe not strictly necessary, because I think
+  POSIX says unmap must happen in all types of process termination.  But to be
+  safe should it always be done?  Need to read docs.
+
+? Other processes, or should they be allowed to continue?  Like if a real
+  hardware CPU failed but the others are still alright.  Could make a
+  configurable parameter that goes either way.
+
+
+I want clean-up to be per-processor, so that a processor can be killed but the
+others still work.  All-processor clean-up can easily be composed from
+per-processor clean-up.
+
+Might atexit be useful? - No because it's lower-level than the Scheme system and
+so shouldn't be used to run Scheme procedures because when atexit procedures are
+run the Scheme system is probably already shutdown.
+
+Handling signal-caused death is a challenge because of portability across Scheme
+systems.  Shouldn't assume they all raise a Scheme exception for SIGINT (like
+Ikarus does), and shouldn't assume catching signals and running FFI callbacks to
+Scheme as signal handlers can be done the same for different Scheme systems.
+
+Could put exception handlers around whatever dynamic extents, to clean-up.
+(This won't generally portably work to clean-up when a process dies because of a
+signal.)  To allow keeping the other processes running, the clean-up should be
+for only the erroring process, which probably has implications for where the
+exception handler should be. - No, using an exit handlers facility provided by
+the Scheme system is a better solution.
+
+
+Seems like 3 ways of cleaning-up are needed:
+
+- Explicit turn-off command.  The control path naturally continues to the
+  clean-up.  Not sure how this should be.  The processors going out-of-bounds of
+  instruction segments should be prevented by the OS/user software, and so
+  having it raise an exception still is good.  I think the only way a "normal
+  continue to clean-up" should happen is when the system is told to turn off.
+  But such a command to turn off maybe should clean-up in some way different
+  than control flow simply continuing to clean-up.
+
+- Scheme exception.  Handler cleans-up before re-raising.
+
+- Posix signal.  atexit can't help for this.  Seems like a signal handler is the
+  only way to run the clean-up, which requires a foreign callback-to-Scheme
+  procedure, which I'm not sure how portable across Scheme systems it can be.

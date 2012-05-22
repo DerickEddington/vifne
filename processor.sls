@@ -18,7 +18,6 @@
     (rnrs conditions)
     (vifne config)
     (vifne posix)
-    (vifne posix redirect)
     (vifne message-queue)
     (vifne processor array)
     (vifne processor cache)
@@ -37,56 +36,66 @@
 
 
   (define (start-processor n sth stt)
-
     (define name (string-append "processor" (number->string n)))
-    (redirect-stdouts name) ; Redirect output before doing anything.
 
-    ; Create this processor's message queue for replies from the storage
-    ; controller.
-    (set! replies (create-message-queue name))
+    (define (main)
+      ; Create this processor's message queue for replies from the storage
+      ; controller.
+      (set! replies (create-message-queue name))
+      ; If the storage controller process has not created its message queue yet,
+      ; wait a second and try again up to 5 times.
+      (let retry ((max 5))
+        (unless (positive? max)
+          (error 'start-processor "storage-controller queue does not exist"))
+        (guard (ex ((error? ex)
+                    (sleep 1)
+                    (retry (- max 1))))
+          (set! storage (open-message-queue "storage-controller"))))
+      ; Register with the storage controller.
+      (send storage `(processor ,name))
+      ; Get the ID the storage controller assigned to this processor.
+      (set! sid (cadr (receive*)))
 
-    ; If the storage controller process has not created its message queue yet,
-    ; wait a second and try again up to 5 times.
-    (let retry ((max 5))
-      (unless (positive? max)
-        (error 'start-processor "storage-controller queue does not exist"))
-      (guard (ex ((error? ex)
-                  (sleep 1)
-                  (retry (- max 1))))
-        (set! storage (open-message-queue "storage-controller"))))
+      ; Initialize the sub-libraries that must be able to message with the
+      ; storage controller.  This is done like this to avoid import circles.
+      (for-each (lambda (proc) (proc send* receive*))
+                (list cache:set-storage-comm!
+                      registers:set-storage-comm!
+                      operations:set-storage-comm!))
 
-    ; Register with the storage controller.
-    (send storage `(processor ,name))
-    ; Get the ID the storage controller assigned to this processor.
-    (set! sid (cadr (receive*)))
+      ; Save the chunk IDs of the startup-tasks stream, for when the processor
+      ; stops.
+      (set! startup-tasks-head-id sth)
+      (set! startup-tasks-tail-id stt)
 
-    ; Initialize the sub-libraries that must be able to message with the storage
-    ; controller.  This is done like this to avoid import circles.
-    (for-each (lambda (proc) (proc send* receive*))
-              (list cache:set-storage-comm!
-                    registers:set-storage-comm!
-                    operations:set-storage-comm!))
+      ; Start executing instructions.
+      (send* `(stream-get ,startup-tasks-head-id #F))
+      (let ((x (receive*)))
+        (if (list? x)
+          (begin
+            (assert (caddr x)) ; ptr? is true
+            ; Set the Instruction Segment register to point to the instruction
+            ; segment gotten from the stream, but don't increment the reference
+            ; count because stream-get already incremented it.
+            (set-register! (sr IS) (cadr x) #T #F)
+            ;(register-value-set! (sr II) 0)  Already initialized.
+            (instruction-interpreter))
+          (begin
+            (assert (eq? 'stream-empty x))
+            ; TODO?: Wait for tasks to become available via stealing from
+            ; another processor's PTQ or from the global DTQ.
+            ; TODO?: This sleep hack is temporary. Could something better be
+            ; done for the temporary hack?
+            (sleep (expt 2 30))))))
 
-    ; Save the chunk IDs of the startup-tasks stream, for when the processor
-    ; stops.
-    (set! startup-tasks-head-id sth)
-    (set! startup-tasks-tail-id stt)
+    (define (before-death)
+      ; TODO
+      '(cleanup-cache))
 
-    ; Start executing instructions.
-    (send* `(stream-get ,startup-tasks-head-id #F))
-    (let ((x (receive*)))
-      (if (list? x)
-        (begin (assert (caddr x)) ; ptr? is true
-               ; Set the Instruction Segment register to point to the
-               ; instruction segment gotten from the stream, but don't increment
-               ; the reference count because stream-get already incremented it.
-               (set-register! (sr IS) (cadr x) #T #F)
-               ;(register-value-set! (sr II) 0)  Already initialized.
-               (instruction-interpreter))
-        (begin (assert (eq? 'stream-empty x))
-               ; TODO?: Wait for tasks to become available via stealing from
-               ; another processor's PTQ or from the global DTQ.
-               (sleep (expt 2 30))))))
+    (define (after-death)
+      (destroy-message-queue name))
+
+    (values name main before-death after-death))
 
 
   (define (instruction-interpreter)
