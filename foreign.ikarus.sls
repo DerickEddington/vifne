@@ -15,6 +15,7 @@
     c-str->string
     pointer->integer
     integer->pointer
+    pointer?
     NULL
     memcpy
     pointer-ref-u64

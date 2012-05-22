@@ -47,6 +47,16 @@ direct (foreign) memory access of the mmap'ed file.  Doing it through the
 controller is more like the actual FB design, which might be beneficial for
 future changes of the emulator.
 
+Document about how the processor processes access chunks' mmap'ed memory
+directly, after a chunk is allocated, but all other operations on chunks
+(allocation, reference count changes, deallocation, stream operations) must be
+done through the storage controller process.  It's safe under concurrency
+because a newly-allocated chunk can only be accessed by one processor because
+only that processor can possibly have a reference to it.  Even with the
+unimplemented design of unsealed chunks, per the Fresh Breeze papers, it's safe
+becasue unsealsed chunks can't be shared.  The other operations require
+serialization of the operations to be safe under concurrency.
+
 Explore making "random-access lists", the tree-based list representation of
 Okasaki with O(log) random-access and O(1) car, cdr, and cons.  See that SRFI.
 Such a representation might work great with chunks, maybe even further optimized

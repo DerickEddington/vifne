@@ -78,6 +78,9 @@
   (define storage-size)
 
   (define (storage-set! addr size init? alloc-stream!)
+    (assert (pointer? addr))
+    (assert (exact-positive-integer? size))
+    (assert (procedure? alloc-stream!))
     (set! storage-addr (pointer->integer addr))
     (set! storage-size size)
     (set! control-struct addr)
