@@ -37,7 +37,9 @@
 
   (define (refs)
     (let ((x (ref-word (ptr id) reference-count-field)))
-      (if (positive? x) (list " refs:" x) '())))
+      (if (positive? x)
+        (list " refs:" x)
+        (list " next:" (number->string (ref-word (ptr id) next-free-field) 16)))))
 
   (define (tags)
     (let ((x (map cadr (filter (lambda (x) (tagged? (ptr id) (car x)))

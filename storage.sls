@@ -10,6 +10,7 @@
   (export
     chunk&meta-size
     reference-count-field
+    next-free-field
     guard-tag
     stream-head-tag
     stream-tail-tag
