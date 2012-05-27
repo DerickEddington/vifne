@@ -25,7 +25,7 @@
 
 (let ((counter r47) (one r69))
   (set-immediate one 1)
-  (set-immediate counter #e1e7)
+  (set-immediate counter #e1e5)
   (label 'loop)
   (sub counter counter one)
   (jump-positive counter 'loop))
