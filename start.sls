@@ -59,13 +59,10 @@
         (if (zero? pid)
           ; The child process.
           (begin
-            ; Remove the parent process's exit handler from the child process's
-            ; exit handlers.
-            (remove-exit-handlers!)
             ; Redirect output.
             (redirect-stdouts name)
             ; Register the child process's before-death exit handler.
-            (register-exit-handler! (wrap before-death))
+            (exit-handler (wrap before-death))
             ; Execute the purpose of the child process.
             (main)
             ; Exit the process.  The before-death exit-handler will be run.  The
@@ -127,8 +124,8 @@
 
     ; If the parent process exits for any reason, need to run stop!.  It's
     ; alright to register this before forking the children, because they will
-    ; remove their inherited copies.
-    (register-exit-handler! stop!)
+    ; replace with their own.
+    (exit-handler stop!)
     ; Initialize the libraries before the child processes are forked.
     (let ((usf (initialize-libraries! storage-file init-file?)))
       (set! unmap-storage-file usf)
@@ -144,7 +141,7 @@
           ; TODO?: Setup some to-be-designed text input device stuff?
           ; Wait for a child process to die.
           (let-values (((wpid wstatus) (wait)))
-            #;(stop!) ; Not needed, if the Scheme system calls the exit handlers
+            #;(stop!) ; Not needed, if the Scheme system calls the exit handler
                       ; when the program exits.
             ; For now, consider a normal exit of the emulator to be when
             ; the storage-controller process exits normally.
