@@ -28,9 +28,11 @@
       (set! requests (create-message-queue name))
       (set! processors (make-vector num-procs #F))
       (controller-loop))
+    (define (before-death)
+      (assert (not (registered-processors?))))
     (define (after-death)
       (destroy-message-queue name))
-    (values name main #F after-death))
+    (values name main before-death after-death))
 
 
   (define (register-proc-mq! mq)
@@ -40,6 +42,14 @@
          i)))
 
   (define (proc-mq i) (vector-ref processors i))
+
+  (define (unregister! i) (vector-set! processors i #F))
+
+  (define (registered-processors?)
+    (let loop ((i 0))
+      (or (vector-ref processors i)
+          (and (< (+ 1 i) (vector-length processors))
+               (loop (+ 1 i))))))
 
 
   (define-logger debug storage-controller)
@@ -59,6 +69,9 @@
         ((processor)
          (let ((mq (open-message-queue (cadr req))))
            (send* mq `(processor-id ,(register-proc-mq! mq)))))
+
+        ((terminated)
+         (unregister! (cadr req)))
 
         ((allocate)
          (let loop ((count (caddr req)) (a '()))
@@ -84,8 +97,11 @@
 
         ((stream-get)
          (let ((x (apply stream-get! (cddr req))))
-           (reply (if (symbol? x) x `(stream-element . ,x)))))))
+           (reply (if (symbol? x) x `(stream-element . ,x)))))
 
-    (controller-loop))
+        (else (assert #F))))
+
+    (when (registered-processors?)
+      (controller-loop)))
 
 )

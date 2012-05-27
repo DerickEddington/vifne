@@ -14,7 +14,9 @@
     fork
     sleep
     kill
-    wait
+    sigprocmask
+    sigpending
+    waitpid
     malloc
     free
     error/errno
@@ -68,14 +70,17 @@
   (define (kill pid sig) (unless (zero? (kill-raw pid sig)) (error/errno 'kill pid sig)))
 
 
-  (define wait-raw (foreign ("wait" pointer) signed-int))  ; returns pid_t
+  (define waitpid-raw (foreign ("waitpid" signed-int   ; pid_t  pid
+                                          pointer      ; int*  status
+                                          signed-int)  ; int  options
+                               signed-int))  ; returns pid_t
 
-  (define (wait)
+  (define (waitpid pid)
     (let* ((status* (malloc 4))  ; sizeof(int) = 4 is portable enough, right?
-           (pid (wait-raw status*))
+           (pid (waitpid-raw pid status* 0))
            (status (pointer-ref-s32 status* 0)))
       (free status*)
-      (when (negative? pid) (error/errno 'wait))
+      (when (negative? pid) (error/errno 'waitpid))
       (values pid status)))
 
 

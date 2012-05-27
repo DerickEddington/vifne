@@ -84,13 +84,13 @@
             (assert (eq? 'stream-empty x))
             ; TODO?: Wait for tasks to become available via stealing from
             ; another processor's PTQ or from the global DTQ.
-            ; TODO?: This sleep hack is temporary. Could something better be
-            ; done for the temporary hack?
-            (sleep (expt 2 30))))))
+            ))))
 
     (define (before-death)
       ; TODO
-      '(cleanup-cache))
+      #|(cache:cleanup)
+      (registers:cleanup)|#
+      (send* '(terminated)))
 
     (define (after-death)
       (destroy-message-queue name))
@@ -105,13 +105,17 @@
         (when ptr? (processor-exception 'invalid-instruction))
         inst-word))
 
-    (assert (srp? IS))
-    (assert (not (srp? II)))
-    (let ((id (srv IS)) (i (srv II)))
-      (register-value-set! (sr II) (+ 1 i))
-      (guard (ex #;((processor-exception? ex) TODO))
-        (do-operation (get-inst id i))))
-    (instruction-interpreter))
+    ; Check if this process has been told to terminate.  Done between
+    ; instructions to ensure they are not interrupted.
+    (unless (memq 'SIGTERM (sigpending))
+      ; Execute an instruction.
+      (assert (srp? IS))
+      (assert (not (srp? II)))
+      (let ((id (srv IS)) (i (srv II)))
+        (register-value-set! (sr II) (+ 1 i))
+        (guard (ex #;((processor-exception? ex) TODO))
+          (do-operation (get-inst id i))))
+      (instruction-interpreter)))
 
   ;-----------------------------------------------------------------------------
 

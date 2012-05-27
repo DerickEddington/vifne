@@ -8,8 +8,10 @@
 (library (vifne posix misfits)
   (export
     errno
+    sigprocmask
+    sigpending
     file-size)
   (import
-    (only (ikarus) file-size)
+    (only (ikarus) file-size sigprocmask sigpending)
     (only (ikarus foreign) errno))
 )
