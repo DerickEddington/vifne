@@ -77,11 +77,11 @@
 
   (define (waitpid pid)
     (let* ((status* (malloc 4))  ; sizeof(int) = 4 is portable enough, right?
-           (pid (waitpid-raw pid status* 0))
+           (r (waitpid-raw pid status* 0))
            (status (pointer-ref-s32 status* 0)))
       (free status*)
-      (when (negative? pid) (error/errno 'waitpid))
-      (values pid status)))
+      (when (negative? r) (error/errno 'waitpid pid))
+      (values r status)))
 
 
   (define malloc-raw (foreign ("malloc" unsigned-long)  ; size_t  size
