@@ -15,6 +15,7 @@
     rv rp? r-set!
     II IS
     sr srv srp? sr-copy!
+    registers:cleanup
     registers:set-storage-comm!)
   (import
     (rnrs base)
@@ -80,6 +81,12 @@
     (and (exact-non-negative-integer? x) (< x (vector-length special-register-set))))
   (define (group-mask? x)
     (and (exact-non-negative-integer? x) (<= x #xFFFF)))
+
+  (define (registers:cleanup)
+    ; Clear the registers, which decrements all referenced chunks' reference
+    ; counts.
+    (define (clear s) (vector-for-each (lambda (r) (set-register! r 0 #F #F)) s))
+    (for-each clear (list register-set special-register-set)))
 
   ;-----------------------------------------------------------------------------
 

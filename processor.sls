@@ -87,9 +87,8 @@
             ))))
 
     (define (before-death)
-      ; TODO
-      #|(cache:cleanup)
-      (registers:cleanup)|#
+      (registers:cleanup)
+      (cache:cleanup)
       (send* '(terminated)))
 
     (define (after-death)

@@ -13,6 +13,7 @@
     store-chunk!
     get-data-chunk
     get-inst-chunk
+    cache:cleanup
     cache:set-storage-comm!)
   (import
     (rnrs base)
@@ -56,6 +57,17 @@
   (define inst-access-unit (make-vector cache-size #F))
   (define data-assoc-unit (make-eqv-hashtable cache-size))
   (define inst-assoc-unit (make-eqv-hashtable cache-size))
+
+  (define (cache:cleanup)
+    ; Clear the cache.  First, decrement all cached chunks' reference counts.
+    (define (clear au)
+      (do ((i 0 (+ 1 i)))
+          ((= (vector-length au) i))
+        (let ((c (vector-ref au i)))
+          (when c
+            (send* `(decrement ,(chunk-id c)))
+            (vector-set! au i #F)))))
+    (for-each clear (list data-access-unit inst-access-unit)))
 
   ; The Least-Recently-Used data structure is a mutable double-linked list of
   ; nodes that represent cache locations, and a node lookup table indexed by
