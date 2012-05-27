@@ -26,10 +26,10 @@
     (define name "storage-controller")
     (define (main)
       (set! requests (create-message-queue name))
-      (set! processors (make-vector num-procs #F))
+      (set! processors (make-vector num-procs 'unregistered))
       (controller-loop))
     (define (before-death)
-      (assert (not (registered-processors?))))
+      (assert (all-terminated?)))
     (define (after-death)
       (destroy-message-queue name))
     (values name main before-death after-death))
@@ -37,7 +37,7 @@
 
   (define (register-proc-mq! mq)
     (do ((i 0 (+ 1 i)))
-        ((not (vector-ref processors i))
+        ((eq? 'unregistered (vector-ref processors i))
          (vector-set! processors i mq)
          i)))
 
@@ -45,11 +45,11 @@
 
   (define (unregister! i) (vector-set! processors i #F))
 
-  (define (registered-processors?)
-    (let loop ((i 0))
-      (or (vector-ref processors i)
-          (and (< (+ 1 i) (vector-length processors))
-               (loop (+ 1 i))))))
+  (define (all-terminated?)
+    (not (let loop ((i 0))
+           (or (vector-ref processors i)
+               (and (< (+ 1 i) (vector-length processors))
+                    (loop (+ 1 i)))))))
 
 
   (define-logger debug storage-controller)
@@ -101,7 +101,7 @@
 
         (else (assert #F))))
 
-    (when (registered-processors?)
+    (unless (all-terminated?)
       (controller-loop)))
 
 )
