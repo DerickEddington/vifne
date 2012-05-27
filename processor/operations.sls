@@ -96,21 +96,19 @@
      ; TODO?: If in the future there's a cache of chunks for allocating, this
      ; will change to use it, instead of communicating with the storage
      ; controller here.
-     (send* '(allocate 1))
+     (send* '(allocate))
      (let ((x (receive*)))
        (when (symbol? x) (processor-exception x))
        (let* ((id (cadr x))
               (c (new-chunk id)))
          (let-values (((r i) (group-select src-grp grp-sel)))
            ; Set the fields of the chunk according to the register group
-           ; selection, and collect any pointers set in the fields.
-           (let ((incr (fold-left (lambda (a r i)
-                                    (chunk-set! c i (rv r) (rp? r))
-                                    (if (rp? r) (cons (rv r) a) a))
-                                  '() r i)))
-             ; Increment the reference counts of any chunks now referenced by
-             ; the fields of the chunk.
-             (unless (null? incr) (send* `(increment . ,incr)))))
+           ; selection, and increment the reference counts of any chunks now
+           ; referenced.
+           (for-each (lambda (r i)
+                       (chunk-set! c i (rv r) (rp? r))
+                       (when (rp? r) (send* `(increment ,(rv r)))))
+                     r i))
          ; Store the chunk in the shared storage at this point in case another
          ; processor needs to access the chunk.
          (store-chunk! c)

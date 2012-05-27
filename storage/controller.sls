@@ -74,18 +74,14 @@
          (unregister! (cadr req)))
 
         ((allocate)
-         (let loop ((count (caddr req)) (a '()))
-           (define (done) (reply (if (pair? a) `(chunk-ids . ,a) 'storage-full)))
-           (if (positive? count)
-             (let ((id (alloc-chunk!)))
-               (if id (loop (- count 1) (cons id a)) (done)))
-             (done))))
+         (let ((id (alloc-chunk!)))
+           (reply (if id `(chunk-id ,id) 'storage-full))))
 
         ((increment)
-         (for-each incr-refcount! (cddr req)))
+         (incr-refcount! (caddr req)))
 
         ((decrement)
-         (for-each decr-refcount! (cddr req)))
+         (decr-refcount! (caddr req)))
 
         ((allocate-stream)
          (let ((h&t (alloc-stream!)))
