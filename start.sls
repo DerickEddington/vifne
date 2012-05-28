@@ -81,12 +81,7 @@
   (define (initialize-libraries! storage-file init-file?)
     (let-values (((addr size) (mmap-storage-file storage-file)))
       (storage-set! addr size init-file? alloc-stream!)
-      (main-pid-set! (getpid))
-      ; TODO: Should this procedure be returned?  Explicitly unmapping probably
-      ; isn't necessary (need to verify in Posix docs), and it's inconsistent
-      ; with the child processes not unmapping.
-      ; Return the procedure that unmaps the storage file.
-      (lambda () (munmap addr size))))
+      (main-pid-set! (getpid))))
 
 
   (define (start-emulator storage-file init-file? num-procs)
@@ -105,7 +100,6 @@
     (define processor-cleanups '())
     (define storage-controller-pid #F)
     (define storage-controller-cleanup #F)
-    (define unmap-storage-file values)
 
     (define (stop!)
       (define (term pid) (ignore-exception (kill pid SIGTERM)))
@@ -114,18 +108,14 @@
       ; before-death clean-up that must be done by them.  The storage controller
       ; must not be terminated until after the processors have completed their
       ; clean-up.  Also, call the processes' after-death clean-ups, after they
-      ; are terminated.  TODO: How will the children unmap the storage file?
+      ; are terminated.
       (for-each term processor-pids)
       (for-each wait processor-pids)
       (for-each (lambda (p) (p)) processor-cleanups)
       (when storage-controller-pid
         #;(term storage-controller-pid) ; It exits when all processors have.
         (wait storage-controller-pid)
-        (storage-controller-cleanup))
-      ; Unmap the storage file.  TODO: Probably not strictly
-      ; necessary, as the OS should automatically do it properly
-      ; when the process terminates.
-      (ignore-exception (unmap-storage-file)))
+        (storage-controller-cleanup)))
 
     ; If the parent process exits for any reason, including signal delivery,
     ; need to run stop!.  It's alright to register this before forking the
@@ -133,8 +123,7 @@
     (exit-handler stop!)
 
     ; Initialize the libraries before the child processes are forked.
-    (set! unmap-storage-file
-          (initialize-libraries! storage-file init-file?))
+    (initialize-libraries! storage-file init-file?)
 
     ; Fork the storage controller process.
     (let-values (((pid cu) (fork-storage-controller)))

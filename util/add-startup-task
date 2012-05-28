@@ -26,8 +26,6 @@
               (string->number) exact-integer?
               0))
 
-(define clean-up (initialize-libraries! storage-file #F))
+(initialize-libraries! storage-file #F)
 
 (add-startup-task! chunk-id adjustment)
-
-(clean-up)

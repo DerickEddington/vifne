@@ -84,5 +84,3 @@
             (print-chunk c))
           (loop (+ chunk&meta-size c) e? (bytevector-copy bv)))))
     (for-each display (list "Total size: " size " (" (/ size chunk&meta-size) ")\n")))
-
-  (munmap addr size))

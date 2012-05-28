@@ -5,7 +5,6 @@
 (library (vifne posix)
   (export
     mmap
-    munmap
     open
     close
     dup2
@@ -109,15 +108,6 @@
     (let ((p (apply mmap-raw args)))
       (when (= MAP_FAILED (pointer->integer p)) (apply error/errno 'mmap args))
       p))
-
-
-  (define munmap-raw (foreign ("munmap" pointer         ; void*   addr
-                                        unsigned-long)  ; size_t  len
-                              signed-int))  ; returns int
-
-  (define (munmap . args)
-    (unless (zero? (apply munmap-raw args))
-      (apply error/errno 'munmap args)))
 
 
   (define open-raw (foreign ("open" pointer           ; char*   pathname

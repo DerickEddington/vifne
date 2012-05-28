@@ -9,7 +9,6 @@
     mq_open
     mq_send
     mq_receive
-    mq_close
     mq_unlink)
   (import
     (rnrs base)
@@ -62,12 +61,6 @@
     (let ((s (mq_receive-raw mqd p len NULL)))
       (when (negative? s) (error/errno 'mq_receive mqd p len))
       s))
-
-
-  (define mq_close-raw (foreign ("mq_close" signed-int)  ; mqd_t  mqdes
-                                signed-int))  ; returns int
-
-  (define (mq_close mqd) (unless (zero? (mq_close-raw mqd)) (error/errno 'mq_close mqd)))
 
 
   (define mq_unlink-raw (foreign ("mq_unlink" pointer)  ; char*  name

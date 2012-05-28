@@ -61,7 +61,7 @@
          (current-input-port)))
 
 
-(define clean-up (initialize-libraries! storage-file initialize-storage-file?))
+(initialize-libraries! storage-file initialize-storage-file?)
 
 (define stored-id
   ; Copy the assembled chunk graph into new chunks in the mmap'ed storage file.
@@ -89,5 +89,3 @@
   ; necessary because of the count of 1 that store! gave and the incrementing
   ; that putting in the stream does, i.e. 1 + 1 - 1 = 1.
   (add-startup-task! stored-id -1))
-
-(clean-up)
