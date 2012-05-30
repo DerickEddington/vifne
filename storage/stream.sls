@@ -123,7 +123,7 @@
                     ; head to the next chunk.
                     (let-values (((n n-p?) (ref-field (id->ptr he) next-elements-field)))
                       (if n-p?
-                        (begin (not (assert (= te he)))
+                        (begin (assert (not (= te he)))
                                (set-field! s head-elements-field n #T)
                                (set-word! s head-index-field 0))
                         (begin (assert (= te he))
