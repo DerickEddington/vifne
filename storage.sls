@@ -22,6 +22,7 @@
     set-word!
     ref-field
     set-field!
+    ptr-field?
     alloc-chunk!
     chunk-allocated?
     incr-refcount!
@@ -55,9 +56,9 @@
   (define ref-word  (case word-size ((8) pointer-ref-u64)))
   (define set-word! (case word-size ((8) pointer-set-u64!)))
 
-  (define (ref-field c i)
-    (values (ref-word c i)
-            (bitwise-bit-set? (ref-word c pointer-flags-field) i)))
+  (define (ptr-field? c i) (bitwise-bit-set? (ref-word c pointer-flags-field) i))
+
+  (define (ref-field c i) (values (ref-word c i) (ptr-field? c i)))
 
   (define (set-field! c i v p?)
     (let ((pfl (ref-word c pointer-flags-field)))
@@ -164,8 +165,8 @@
          (and (< id storage-size)
               (let* ((m (id->ptr id))
                      (next (ref-word m next-free-field)))
-                ; Null next means the following chunk is the next (this
-                ; semantics supports sparse files).
+                ; Zero next means the following chunk is the next.  This
+                ; supports sparse files.
                 (free-list-set! (if (positive? next) next (+ id chunk&meta-size)))
                 (set-word! m reference-count-field refc)
                 (set-word! m tags-field tags)

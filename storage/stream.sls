@@ -71,16 +71,16 @@
 
           (define (done)
             ; Check if there is a procedure waiting for an element.
-            (let ((n (ref-word s notify-field)))
-              (and (positive? n)
+            (let-values (((n p?) (ref-field s notify-field)))
+              (and p?
                    (begin (incr-refcount! n) ; Because it's returned.
                           ; TODO?: Should it be cleared?  Might be useful if not.
                           (set-field! s notify-field 0 #F)
                           n))))
 
-          (let ((te (ref-word s tail-elements-field))
-                (i (ref-word s tail-index-field)))
-            (if (and (positive? te) (< i next-elements-field))
+          (let-values (((te te-p?) (ref-field s tail-elements-field))
+                       ((i) (ref-word s tail-index-field)))
+            (if (and te-p? (< i next-elements-field))
               ; There is already an available slot.
               (begin (set-elem! te i)
                      (set-word! s tail-index-field (+ 1 i))
@@ -92,9 +92,9 @@
                          (set-word! (id->ptr c) next-elements-field 0)
                          (set-field! s tail-elements-field c #T)
                          (set-word! s tail-index-field 1)
-                         (if (positive? te)
+                         (if te-p?
                            (set-field! (id->ptr te) next-elements-field c #T)
-                           (begin (assert (zero? (ref-word s head-elements-field)))
+                           (begin (assert (not (ptr-field? s head-elements-field)))
                                   (set-field! s head-elements-field c #T)
                                   (set-word! s head-index-field 0)))
                          (done))
@@ -106,9 +106,9 @@
     (let ((h (id->ptr head-id)))
       (if (tagged? h stream-head-tag)
         (let ((s (id->ptr (ref-word h handle-stream-field))))
-          (let ((he (ref-word s head-elements-field))
-                (i (ref-word s head-index-field)))
-            (if (positive? he)
+          (let-values (((he he-p?) (ref-field s head-elements-field))
+                       ((i) (ref-word s head-index-field)))
+            (if he-p?
               ; There is an available element.
               (let-values (((val ptr?) (ref-field (id->ptr he) i)))
                 (when ptr? (incr-refcount! val)) ; Because it's returned.
@@ -121,8 +121,8 @@
                     (set-word! s head-index-field i)
                     ; No more elements in what was the head chunk.  Move the
                     ; head to the next chunk.
-                    (let ((n (ref-word (id->ptr he) next-elements-field)))
-                      (if (positive? n)
+                    (let-values (((n n-p?) (ref-field (id->ptr he) next-elements-field)))
+                      (if n-p?
                         (begin (not (assert (= te he)))
                                (set-field! s head-elements-field n #T)
                                (set-word! s head-index-field 0))
@@ -134,7 +134,7 @@
                 (list val ptr?))
               ; Stream is empty.  Save notify-proc-id for when an element is added.
               (begin (when notify-proc-id
-                       (assert (zero? (ref-word s notify-field)))
+                       (assert (not (ptr-field? s notify-field))) ; TODO: Good?
                        (set-field! s notify-field notify-proc-id #T))
                      'stream-empty))))
         'not-head)))
