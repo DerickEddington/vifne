@@ -89,7 +89,7 @@
 
         ((stream-put)
          (let ((x (apply stream-put! (cddr req))))
-           (reply (if (symbol? x) x `(notify ,x)))))
+           (reply (if (symbol? x) x `(resume ,x)))))
 
         ((stream-get)
          (let ((x (apply stream-get! (cddr req))))
