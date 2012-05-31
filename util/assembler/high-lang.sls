@@ -29,8 +29,6 @@
     rE0 rE1 rE2 rE3 rE4 rE5 rE6 rE7 rE8 rE9 rEA rEB rEC rED rEE rEF
     rF0 rF1 rF2 rF3 rF4 rF5 rF6 rF7 rF8 rF9 rFA rFB rFC rFD rFE rFF
 
-    srIS srII
-
     group
 
     data
@@ -44,8 +42,6 @@
     set-multiple-immediates
     set-immediate
     copy
-    get-special
-    set-special
     ior
     sub
     jump-zero
@@ -120,9 +116,6 @@
     rD0 rD1 rD2 rD3 rD4 rD5 rD6 rD7 rD8 rD9 rDA rDB rDC rDD rDE rDF
     rE0 rE1 rE2 rE3 rE4 rE5 rE6 rE7 rE8 rE9 rEA rEB rEC rED rEE rEF
     rF0 rF1 rF2 rF3 rF4 rF5 rF6 rF7 rF8 rF9 rFA rFB rFC rFD rFE rFF)
-
-  (define-registers (special-register? special-register-code)
-    srIS srII)
 
 
   (define (group? x)
@@ -200,12 +193,6 @@
     (copy ((dest register?) (src register?))
      (map register-code (list dest src)))
 
-    (get-special ((dest register?) (src special-register?))
-     (list (register-code dest) (special-register-code src)))
-
-    (set-special ((dest special-register?) (src register?))
-     (list (special-register-code dest) (register-code src)))
-
     (ior ((dest register?) (src1 register?) (src2 register?))
      (map register-code (list dest src1 src2)))
 
@@ -221,8 +208,8 @@
     (jump-negative ((test register?) (index (or? unsigned-32bit? label-ref?)))
      (list (register-code test) (maybe-label index)))
 
-    (goto ((segment register?) (index register?))
-     (map register-code (list segment index))))
+    (goto ((segment register?))
+     (list (register-code segment))))
 
 
   (define (data val)

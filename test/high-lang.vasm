@@ -20,7 +20,6 @@
 (chunk-create r1D (group r0 r3 rA rE rF))
 
 (copy r2B r1D)
-(get-special r1D srIS)
 
 (let ((c rFF) (one r1))
   (set-immediate one 1)
@@ -31,7 +30,7 @@
   (jump-positive c 'loop))
 
 (set-immediate rA8 'skip)
-(set-special srII rA8)   ; Unconditional jump.
+(jump-positive r1 rA8)   ; Unconditional jump.
 
 (chunk-get (group rCE rCA) r2B)
 (goto rCE rCA)

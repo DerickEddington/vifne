@@ -155,16 +155,6 @@
      (r-set! dest (rv src) (rp? src) #T))
 
 
-    ((get-special (dest 16 register-code?)
-                  (src  16 special-register-code?))
-     (r-set! dest (srv src) (srp? src) #T))
-
-
-    ((set-special (dest 16 special-register-code?)
-                  (src  16 register-code?))
-     (sr-copy! dest src))
-
-
     ((ior (dest 16 register-code?)
           (src1 16 register-code?)
           (src2 16 register-code?))
@@ -193,12 +183,10 @@
      (jump negative? test index))
 
 
-    ((goto (seg 16 register-code?)
-           (i   16 register-code?))
+    ((goto (seg 16 register-code?))
      (unless (rp? seg) (processor-exception 'not-pointer))
-     (when (rp? i) (processor-exception 'pointer))
      (set-register! (sr IS) (rv seg) #T #T)
-     (register-value-set! (sr II) (rv i)))
+     (register-value-set! (sr II) 0))
 
     )
 

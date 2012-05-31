@@ -14,7 +14,6 @@
  (chunk-create #x1D #xC409 0)
 
  (copy #x2B #x1D)
- (get-special #x1D 0)
 
  (set-immediate 1 1)
  (set-immediate #xFF 5)
@@ -24,7 +23,7 @@
  (jump-positive #xFF (label loop))
 
  (set-immediate #xA8 (label skip))
- (set-special 1 #xA8) ; Unconditional jump.
+ (jump-positive 1 #xA8) ; Unconditional jump.
 
  (chunk-get #xC0 #x4400 #x2B)
  (goto #xCE #xCA)

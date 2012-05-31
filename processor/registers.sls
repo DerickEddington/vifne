@@ -14,7 +14,7 @@
     register-value-set!
     rv rp? r-set!
     II IS
-    sr srv srp? sr-copy!
+    sr srv srp?
     registers:cleanup
     registers:set-storage-comm!)
   (import
@@ -27,7 +27,7 @@
     (vifne processor exception))
 
   (define-record-type register (fields (mutable value) (mutable pointer?)))
-  (define-record-type special-register (parent register) (fields validator))
+  (define-record-type special-register (parent register))
 
   (define register-set
     (let ((v (make-vector register-set-size)))
@@ -38,8 +38,8 @@
 
   (define-syntax define-special-registers
     (syntax-rules ()
-      ((_ set (special validator) ...)
-       (begin (define set (vector (make-special-register 0 #F validator) ...))
+      ((_ set special ...)
+       (begin (define set (vector (make-special-register 0 #F) ...))
               (define ordered '(special ...))
               (define special (- (length ordered) (length (memq 'special ordered))))
               ...))))
@@ -48,8 +48,8 @@
   (define (non-pointer? r) (not (pointer? r)))
 
   (define-special-registers special-register-set
-    (IS     pointer?)           ; Instruction Segment
-    (II     non-pointer?)       ; Instruction Index
+    IS        ; Instruction Segment
+    II        ; Instruction Index
     )
 
   (define (set-register! r v p? incr?)
@@ -69,11 +69,6 @@
   (define (sr n) (vector-ref special-register-set n))
   (define (srv n) (register-value (sr n)))
   (define (srp? n) (register-pointer? (sr n)))
-  (define (sr-copy! s x)
-    (let ((s (sr s)) (x (r x)))
-      (unless ((special-register-validator s) x)
-        (processor-exception 'invalid-special-register-value))
-      (set-register! s (register-value x) (register-pointer? x) #T)))
 
   (define (register-code? x)
     (and (exact-non-negative-integer? x) (< x register-set-size)))
