@@ -1,3 +1,15 @@
+Investigate making streams queue procedures to notify of elements, instead of
+having only one field that would be a conflict if more than one notifyee desires
+to be notified.  The same stream implementation can be used for such queue
+(maybe with a parameterization).
+
+Investigate not having processor caches, and instead always access mmap'ed
+storage.  Why have a cache that tries to be like a real machine, when the
+emulator is not going to be like a real machine in many other ways?
+
+Tests of streams: manual in repl, and new test/stream.vasm that uses multiple
+processors putting and getting from a stream.
+
 Investigate if it's possible for a chunk to be freed by a processor while
 another processor still intends to use it.  E.g. processor A decides to use a
 chunk, then processor B decrements its refcount to 0 which frees it, then
@@ -15,9 +27,6 @@ register group (i.e. any register in the group) and an index in that group.
 E.g.: (copy group7 4 r35).  This will allow loops that work on consecutive chunk
 fields to use a loop index variable to refer to the registers.  Otherwise such
 loops will have to be unrolled so that the required registers can be specified.
-
-Test emulator using multiple processors/processes, by putting multiple
-procedures in the startup-tasks-stream.
 
 Need to carefully analyze reference counting to prove it all correct.
 
