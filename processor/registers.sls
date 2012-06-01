@@ -23,7 +23,7 @@
     (rnrs lists)
     (rnrs records syntactic)
     (vifne config)
-    (only (vifne storage) valid-id?)
+    (only (vifne storage) valid-id? f fv fp?)
     (vifne processor exception))
 
   (define-record-type register (fields (mutable value) (mutable pointer?)))
@@ -54,19 +54,19 @@
     II        ; Instruction Index
     )
 
-  (define (set-register! r v p? incr?)
-    (assert ((if p? valid-id? non-negative-word-integer?) v))
+  (define (set-register! r x incr?)
+    (assert ((if (fp? x) valid-id? non-negative-word-integer?) (fv x)))
     (let ((oldv (register-value r))
           (oldp? (register-pointer? r)))
-      (register-value-set! r v)
-      (register-pointer?-set! r p?)
-      (when (and p? incr?) (send* `(increment ,v)))
+      (register-value-set! r (fv x))
+      (register-pointer?-set! r (fp? x))
+      (when (and (fp? x) incr?) (send* `(increment ,(fv x))))
       (when oldp? (send* `(decrement ,oldv)))))
 
   (define (r n) (vector-ref register-set n))
   (define (rv n) (register-value (r n)))
   (define (rp? n) (register-pointer? (r n)))
-  (define (r-set! n v p? incr?) (set-register! (r n) v p? incr?))
+  (define (r-set! n x incr?) (set-register! (r n) x incr?))
 
   (define (sr n) (vector-ref special-register-set n))
   (define (srv n) (register-value (sr n)))
@@ -82,7 +82,7 @@
   (define (registers:cleanup)
     ; Clear the registers, which decrements all referenced chunks' reference
     ; counts.
-    (define (clear s) (vector-for-each (lambda (r) (set-register! r 0 #F #F)) s))
+    (define (clear s) (vector-for-each (lambda (r) (set-register! r (f 0 #F) #F)) s))
     (for-each clear (list register-set special-register-set)))
 
   ;-----------------------------------------------------------------------------

@@ -93,7 +93,7 @@
 
         ((stream-get)
          (let ((x (apply stream-get! (cddr req))))
-           (reply (if (symbol? x) x `(stream-element . ,x)))))
+           (reply (if (symbol? x) x `(stream-element ,x)))))
 
         (else (assert #F))))
 

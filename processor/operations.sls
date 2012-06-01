@@ -110,14 +110,14 @@
                        (group-select src-grp grp-sel)))
          ; Set the specified register to point to the chunk, but don't increment
          ; the reference count because the allocation already set it to 1.
-         (r-set! dest id #T #F))))
+         (r-set! dest (f id #T) #F))))
 
 
     ((chunk-get (dest-grp 16 register-code?)
                 (grp-sel  16 group-mask?)
                 (src      16 register-code?))
      (unless (rp? src) (processor-exception 'not-pointer))
-     (vector-for-each (lambda (r f) (when r (r-set! r (fv f) (fp? f) #T)))
+     (vector-for-each (lambda (r f) (when r (r-set! r f #T)))
                       (group-select dest-grp grp-sel)
                       (load-chunk* (rv src))))
 
@@ -127,7 +127,7 @@
      (register-value-set! (sr II)
        (fold-left (lambda (i r)
                     (let ((x (array-ref (srv IS) i)))
-                      (r-set! r (fv x) (fp? x) #T))
+                      (r-set! r x #T))
                     (+ 1 i))
                   (srv II)
                   (filter values (vector->list (group-select dest-grp grp-sel))))))
@@ -137,15 +137,16 @@
                     (v    32 signed-32bit?))
      (r-set! dest
              ; v is always non-negative when extracted.
-             (if (bitwise-bit-set? v 31)
-               (bitwise-ior #xFFFFFFFF00000000 v)
-               v)
-             #F #F))
+             (f (if (bitwise-bit-set? v 31)
+                  (bitwise-ior #xFFFFFFFF00000000 v)
+                  v)
+                #F)
+             #F))
 
 
     ((copy (dest 16 register-code?)
            (src  16 register-code?))
-     (r-set! dest (rv src) (rp? src) #T))
+     (r-set! dest (f (rv src) (rp? src)) #T))
 
 
     ((ior (dest 16 register-code?)
@@ -196,7 +197,7 @@
 
   (define (arith proc dest src1 src2)
     (when (or (rp? src1) (rp? src2)) (processor-exception 'pointer))
-    (r-set! dest (proc (rv src1) (rv src2)) #F #F))
+    (r-set! dest (f (proc (rv src1) (rv src2)) #F) #F))
 
 
   (define (jump pred test index)

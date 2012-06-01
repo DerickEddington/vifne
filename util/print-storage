@@ -53,11 +53,11 @@
                    s))
 
   (define (word i)
-    (let-values (((v p?) (ref-field (ptr id) i)))
-      (list (pad (number->string v 16)
+    (let ((x (ref-field (ptr id) i)))
+      (list (pad (number->string (fv x) 16)
                  (* 2 word-size) ; Two hex chars per byte.
                  #\space)
-            (if p? ",P " "   "))))
+            (if (fp? x) ",P " "   "))))
 
   (define offset-width (string-length (number->string chunk-wsz 16)))
 

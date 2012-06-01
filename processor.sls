@@ -70,12 +70,12 @@
       (send* `(stream-get ,startup-tasks-head-id #F))
       (let ((x (receive*)))
         (if (list? x)
-          (begin
-            (assert (caddr x)) ; ptr? is true
+          (let ((x (cadr x)))
+            (assert (fp? x))
             ; Set the Instruction Segment register to point to the instruction
             ; segment gotten from the stream, but don't increment the reference
             ; count because stream-get already incremented it.
-            (set-register! (sr IS) (cadr x) #T #F)
+            (set-register! (sr IS) x #F)
             ;(register-value-set! (sr II) 0)  Already initialized.
             (instruction-interpreter))
           (begin

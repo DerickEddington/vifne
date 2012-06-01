@@ -23,12 +23,12 @@
     ref-field
     set-field!
     ptr-field?
+    f fv fp? f= f?
     alloc-chunk!
     chunk-allocated?
     incr-refcount!
     decr-refcount!
     free-chunk!
-    f fv fp?
     load-chunk
     store-chunk!
     storage-set!
@@ -59,15 +59,25 @@
 
   (define (ptr-field? c i) (bitwise-bit-set? (ref-word c pointer-flags-field) i))
 
-  (define (ref-field c i) (values (ref-word c i) (ptr-field? c i)))
+  ; Type that represents a chunk field.
+  (define f cons)
+  (define fv car)
+  (define fp? cdr)
+  (define (f= a b)
+    (and (= (fv a) (fv b))
+         (or (and (fp? a) (fp? b))
+             (and (not (fp? a)) (not (fp? b))))))
+  (define f? pair?)
 
-  (define (set-field! c i v p?)
+  (define (ref-field c i) (f (ref-word c i) (ptr-field? c i)))
+
+  (define (set-field! c i f)
     (let ((pfl (ref-word c pointer-flags-field)))
       (let ((oldv (ref-word c i))
             (oldp? (bitwise-bit-set? pfl i)))
-        (set-word! c i v)
-        (set-word! c pointer-flags-field (bitwise-copy-bit pfl i (if p? 1 0)))
-        (when p? (incr-refcount! v))
+        (set-word! c i (fv f))
+        (set-word! c pointer-flags-field (bitwise-copy-bit pfl i (if (fp? f) 1 0)))
+        (when (fp? f) (incr-refcount! (fv f)))
         (when oldp? (decr-refcount! oldv)))))
 
   (define (bitset . bitsposs)
@@ -207,10 +217,6 @@
         (free-chunk! id))
       c))
 
-
-  (define f cons)
-  (define fv car)
-  (define fp? cdr)
 
   (define (load-chunk id)
     ; Copy a chunk from shared storage.  Disallow if the chunk is guard tagged.

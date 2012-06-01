@@ -28,7 +28,7 @@
     (assert (valid-id? chunk-id))
     (assert (exact-integer? adjustment))
 
-    (stream-put! (startup-tasks-tail) chunk-id #T)
+    (stream-put! (startup-tasks-tail) (f chunk-id #T))
 
     (apply adjust! (if (negative? adjustment)
                      (list (- adjustment) decr-refcount!)
