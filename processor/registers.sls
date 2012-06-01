@@ -29,18 +29,20 @@
   (define-record-type register (fields (mutable value) (mutable pointer?)))
   (define-record-type special-register (parent register))
 
-  (define register-set
-    (let ((v (make-vector register-set-size)))
+  (define (make-register-set size make-reg)
+    (let ((v (make-vector size)))
       (do ((i 0 (+ 1 i)))
-          ((= register-set-size i))
-        (vector-set! v i (make-register 0 #F)))
+          ((= size i))
+        (vector-set! v i (make-reg 0 #F)))
       v))
+
+  (define register-set (make-register-set register-set-size make-register))
 
   (define-syntax define-special-registers
     (syntax-rules ()
       ((_ set special ...)
-       (begin (define set (vector (make-special-register 0 #F) ...))
-              (define ordered '(special ...))
+       (begin (define ordered '(special ...))
+              (define set (make-register-set (length ordered) make-special-register))
               (define special (- (length ordered) (length (memq 'special ordered))))
               ...))))
 
