@@ -18,6 +18,7 @@
     (rnrs conditions)
     (vifne config)
     (vifne posix)
+    (only (vifne storage) f fv fp?)
     (vifne message-queue)
     (vifne processor array)
     (vifne processor registers)
@@ -75,8 +76,8 @@
             ; Set the Instruction Segment register to point to the instruction
             ; segment gotten from the stream, but don't increment the reference
             ; count because stream-get already incremented it.
-            (set-register! (sr IS) x #F)
-            ;(register-value-set! (sr II) 0)  Already initialized.
+            (sr-set! IS x)
+            ;(sr-set! II (f 0 #F))  Already initialized to this.
             (instruction-interpreter))
           (begin
             (assert (eq? 'stream-empty x))
@@ -108,7 +109,7 @@
       (assert (srp? IS))
       (assert (not (srp? II)))
       (let ((id (srv IS)) (i (srv II)))
-        (register-value-set! (sr II) (+ 1 i))
+        (sr-set! II (f (+ 1 i) #F))
         (guard (ex #;((processor-exception? ex) TODO))
           (do-operation (get-inst id i))))
       (instruction-interpreter)))

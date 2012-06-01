@@ -10,11 +10,9 @@
     register-code?
     special-register-code?
     group-mask?
-    set-register!
-    register-value-set!
-    rv rp? r-set!
+    rv rp? rf r-set!
     II IS
-    sr srv srp?
+    srv srp? srf sr-set!
     registers:cleanup
     registers:set-storage-comm!)
   (import
@@ -46,31 +44,35 @@
               (define special (- (length ordered) (length (memq 'special ordered))))
               ...))))
 
-  (define pointer? register-pointer?)
-  (define (non-pointer? r) (not (pointer? r)))
-
   (define-special-registers special-register-set
     IS        ; Instruction Segment
     II        ; Instruction Index
     )
 
-  (define (set-register! r x incr?)
-    (assert ((if (fp? x) valid-id? non-negative-word-integer?) (fv x)))
-    (let ((oldv (register-value r))
-          (oldp? (register-pointer? r)))
-      (register-value-set! r (fv x))
-      (register-pointer?-set! r (fp? x))
-      (when (and (fp? x) incr?) (send* `(increment ,(fv x))))
-      (when oldp? (send* `(decrement ,oldv)))))
+  (define set-register!
+    (case-lambda
+      ((r x incr?)
+       (assert ((if (fp? x) valid-id? non-negative-word-integer?) (fv x)))
+       (let ((oldv (register-value r))
+             (oldp? (register-pointer? r)))
+         (register-value-set! r (fv x))
+         (register-pointer?-set! r (fp? x))
+         (when (and (fp? x) incr?) (send* `(increment ,(fv x))))
+         (when oldp? (send* `(decrement ,oldv)))))
+      ((r x)
+       (set-register! r x #F))))
 
-  (define (r n) (vector-ref register-set n))
-  (define (rv n) (register-value (r n)))
-  (define (rp? n) (register-pointer? (r n)))
-  (define (r-set! n x incr?) (set-register! (r n) x incr?))
+  (define-syntax define-register-accessors
+    (syntax-rules ()
+      ((_ (reg reg-val reg-ptr? reg->field reg-set!) set-vec)
+       (begin (define (reg n) (vector-ref set-vec n))
+              (define (reg-val n) (register-value (reg n)))
+              (define (reg-ptr? n) (register-pointer? (reg n)))
+              (define (reg->field n) (f (reg-val n) (reg-ptr? n)))
+              (define (reg-set! n . a) (apply set-register! (reg n) a))))))
 
-  (define (sr n) (vector-ref special-register-set n))
-  (define (srv n) (register-value (sr n)))
-  (define (srp? n) (register-pointer? (sr n)))
+  (define-register-accessors (r rv rp? rf r-set!) register-set)
+  (define-register-accessors (sr srv srp? srf sr-set!) special-register-set)
 
   (define (register-code? x)
     (and (exact-non-negative-integer? x) (< x register-set-size)))
@@ -82,7 +84,7 @@
   (define (registers:cleanup)
     ; Clear the registers, which decrements all referenced chunks' reference
     ; counts.
-    (define (clear s) (vector-for-each (lambda (r) (set-register! r (f 0 #F) #F)) s))
+    (define (clear s) (vector-for-each (lambda (r) (set-register! r (f 0 #F))) s))
     (for-each clear (list register-set special-register-set)))
 
   ;-----------------------------------------------------------------------------

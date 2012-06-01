@@ -105,12 +105,12 @@
          ; safe to directly write the mmap'ed memory here.
          (store-chunk! id
            (vector-map (lambda (r) (cond (r (when (rp? r) (send* `(increment ,(rv r))))
-                                            (f (rv r) (rp? r)))
+                                            (rf r))
                                          (else (f 0 #F))))
                        (group-select src-grp grp-sel)))
          ; Set the specified register to point to the chunk, but don't increment
          ; the reference count because the allocation already set it to 1.
-         (r-set! dest (f id #T) #F))))
+         (r-set! dest (f id #T)))))
 
 
     ((chunk-get (dest-grp 16 register-code?)
@@ -124,13 +124,13 @@
 
     ((set-multiple-immediates (dest-grp 16 register-code?)
                               (grp-sel  16 group-mask?))
-     (register-value-set! (sr II)
-       (fold-left (lambda (i r)
-                    (let ((x (array-ref (srv IS) i)))
-                      (r-set! r x #T))
-                    (+ 1 i))
-                  (srv II)
-                  (filter values (vector->list (group-select dest-grp grp-sel))))))
+     (sr-set! II
+       (f (fold-left (lambda (i r)
+                       (r-set! r (array-ref (srv IS) i) #T)
+                       (+ 1 i))
+                     (srv II)
+                     (filter values (vector->list (group-select dest-grp grp-sel))))
+          #F)))
 
 
     ((set-immediate (dest 16 register-code?)
@@ -140,13 +140,12 @@
              (f (if (bitwise-bit-set? v 31)
                   (bitwise-ior #xFFFFFFFF00000000 v)
                   v)
-                #F)
-             #F))
+                #F)))
 
 
     ((copy (dest 16 register-code?)
            (src  16 register-code?))
-     (r-set! dest (f (rv src) (rp? src)) #T))
+     (r-set! dest (rf src) #T))
 
 
     ((ior (dest 16 register-code?)
@@ -179,8 +178,8 @@
 
     ((goto (seg 16 register-code?))
      (unless (rp? seg) (processor-exception 'not-pointer))
-     (set-register! (sr IS) (rv seg) #T #T)
-     (register-value-set! (sr II) 0))
+     (sr-set! IS (rf seg) #T)
+     (sr-set! II (f 0 #F)))
 
     )
 
@@ -197,12 +196,12 @@
 
   (define (arith proc dest src1 src2)
     (when (or (rp? src1) (rp? src2)) (processor-exception 'pointer))
-    (r-set! dest (f (proc (rv src1) (rv src2)) #F) #F))
+    (r-set! dest (f (proc (rv src1) (rv src2)) #F)))
 
 
   (define (jump pred test index)
     (when (rp? test) (processor-exception 'pointer))
-    (when (pred (rv test)) (register-value-set! (sr II) index)))
+    (when (pred (rv test)) (sr-set! II (f index #F))))
 
   ;-----------------------------------------------------------------------------
 
