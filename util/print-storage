@@ -10,11 +10,12 @@
         (rnrs control)
         (rnrs lists)
         (rnrs io simple)
+        (rnrs arithmetic bitwise)
         (rnrs bytevectors)
         (vifne util command-line)
         (vifne config)
         (vifne start)
-        (vifne storage)
+        (except (vifne storage) tagged?)
         (vifne foreign)
         (vifne posix))
 
@@ -25,7 +26,9 @@
 
 
 (define storage-addr)
+(define ref-word (case word-size ((8) pointer-ref-u64)))
 (define (ptr id) (integer->pointer (+ storage-addr id)))
+(define (tagged? c bitpos) (bitwise-bit-set? (ref-word c tags-field) bitpos))
 
 
 (define (print-chunk id)
@@ -53,11 +56,12 @@
                    s))
 
   (define (word i)
-    (let ((x (ref-field (ptr id) i)))
-      (list (pad (number->string (fv x) 16)
+    (let ((v (ref-word (ptr id) i))
+          (p? (bitwise-bit-set? (ref-word (ptr id) pointer-flags-field) i)))
+      (list (pad (number->string v 16)
                  (* 2 word-size) ; Two hex chars per byte.
                  #\space)
-            (if (fp? x) ",P " "   "))))
+            (if p? ",P " "   "))))
 
   (define offset-width (string-length (number->string chunk-wsz 16)))
 

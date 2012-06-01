@@ -10,19 +10,17 @@
   (export
     chunk&meta-size
     reference-count-field
+    tags-field
+    pointer-flags-field
     next-free-field
     guard-tag
     stream-head-tag
     stream-tail-tag
     tagged?
     tags
-    id->ptr
     valid-id?
-    ref-word
-    set-word!
     ref-field
     set-field!
-    ptr-field?
     f fv fp? f= f?
     alloc-chunk!
     chunk-allocated?
@@ -57,8 +55,6 @@
   (define ref-word  (case word-size ((8) pointer-ref-u64)))
   (define set-word! (case word-size ((8) pointer-set-u64!)))
 
-  (define (ptr-field? c i) (bitwise-bit-set? (ref-word c pointer-flags-field) i))
-
   ; Type that represents a chunk field.
   (define f cons)
   (define fv car)
@@ -69,21 +65,29 @@
              (and (not (fp? a)) (not (fp? b))))))
   (define f? pair?)
 
-  (define (ref-field c i) (f (ref-word c i) (ptr-field? c i)))
+  (define (ref-field c i)
+    (assert (< i chunk-wsz))
+    (let ((c (id->ptr c)))
+      (f (ref-word c i)
+         (bitwise-bit-set? (ref-word c pointer-flags-field) i))))
 
   (define (set-field! c i f)
-    (let ((pfl (ref-word c pointer-flags-field)))
-      (let ((oldv (ref-word c i))
-            (oldp? (bitwise-bit-set? pfl i)))
-        (set-word! c i (fv f))
-        (set-word! c pointer-flags-field (bitwise-copy-bit pfl i (if (fp? f) 1 0)))
-        (when (fp? f) (incr-refcount! (fv f)))
-        (when oldp? (decr-refcount! oldv)))))
+    (assert (< i chunk-wsz))
+    (let* ((c (id->ptr c))
+           (pfl (ref-word c pointer-flags-field))
+           (oldv (ref-word c i))
+           (oldp? (bitwise-bit-set? pfl i)))
+      (set-word! c i (fv f))
+      (set-word! c pointer-flags-field (bitwise-copy-bit pfl i (if (fp? f) 1 0)))
+      (when (fp? f) (incr-refcount! (fv f)))
+      (when oldp? (decr-refcount! oldv))))
 
   (define (bitset . bitsposs)
     (apply bitwise-ior (map (lambda (bp) (bitwise-arithmetic-shift 1 bp)) bitsposs)))
 
-  (define (tagged? c bitpos) (bitwise-bit-set? (ref-word c tags-field) bitpos))
+  (define (tagged? c bitpos)
+    (let ((c (id->ptr c)))
+      (bitwise-bit-set? (ref-word c tags-field) bitpos)))
   (define tags bitset)
 
 
@@ -220,22 +224,20 @@
 
   (define (load-chunk id)
     ; Copy a chunk from shared storage.  Disallow if the chunk is guard tagged.
-    (let ((m (id->ptr id)))
-      (and (not (tagged? m guard-tag))
-           (let ((ptrs (ref-word m pointer-flags-field))
-                 (fields (make-vector chunk-wsz)))
-             (do ((i 0 (+ 1 i)))
-                 ((= chunk-wsz i))
-               (vector-set! fields i (f (ref-word m i) (bitwise-bit-set? ptrs i))))
-             fields))))
+    (and (not (tagged? id guard-tag))
+         (let ((fields (make-vector chunk-wsz)))
+           (do ((i 0 (+ 1 i)))
+               ((= chunk-wsz i))
+             (vector-set! fields i (ref-field id i)))
+           fields)))
 
   (define (store-chunk! id fields)
     ; Copy a chunk to shared storage.
     (define (ptr? i) (if (fp? (vector-ref fields i)) 1 0))
+    ; The destination must not be guard tagged, because guarded chunks must not
+    ; have copies outside shared storage.
+    (assert (not (tagged? id guard-tag)))
     (let ((m (id->ptr id)))
-      ; The destination must not be guard tagged, because guarded chunks must
-      ; not have copies outside shared storage.
-      (assert (not (tagged? m guard-tag)))
       (do ((i 0 (+ 1 i))
            (ptrs 0 (bitwise-copy-bit ptrs i (ptr? i))))
           ((= chunk-wsz i) (set-word! m pointer-flags-field ptrs))
