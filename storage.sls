@@ -28,6 +28,7 @@
     incr-refcount!
     decr-refcount!
     free-chunk!
+    f fv fp?
     load-chunk
     store-chunk!
     storage-set!
@@ -207,22 +208,24 @@
       c))
 
 
+  (define f cons)
+  (define fv car)
+  (define fp? cdr)
+
   (define (load-chunk id)
     ; Copy a chunk from shared storage.  Disallow if the chunk is guard tagged.
     (let ((m (id->ptr id)))
       (and (not (tagged? m guard-tag))
            (let ((ptrs (ref-word m pointer-flags-field))
-                 (f (make-vector chunk-wsz))
-                 (p (make-vector chunk-wsz)))
+                 (fields (make-vector chunk-wsz)))
              (do ((i 0 (+ 1 i)))
                  ((= chunk-wsz i))
-               (vector-set! f i (ref-word m i))
-               (vector-set! p i (bitwise-bit-set? ptrs i)))
-             (list f p)))))
+               (vector-set! fields i (f (ref-word m i) (bitwise-bit-set? ptrs i))))
+             fields))))
 
-  (define (store-chunk! id f p)
+  (define (store-chunk! id fields)
     ; Copy a chunk to shared storage.
-    (define (ptr? i) (if (vector-ref p i) 1 0))
+    (define (ptr? i) (if (fp? (vector-ref fields i)) 1 0))
     (let ((m (id->ptr id)))
       ; The destination must not be guard tagged, because guarded chunks must
       ; not have copies outside shared storage.
@@ -230,7 +233,7 @@
       (do ((i 0 (+ 1 i))
            (ptrs 0 (bitwise-copy-bit ptrs i (ptr? i))))
           ((= chunk-wsz i) (set-word! m pointer-flags-field ptrs))
-        (set-word! m i (vector-ref f i)))))
+        (set-word! m i (fv (vector-ref fields i))))))
 
   ;-----------------------------------------------------------------------------
 

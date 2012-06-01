@@ -20,7 +20,6 @@
     (vifne posix)
     (vifne message-queue)
     (vifne processor array)
-    (vifne processor cache)
     (vifne processor registers)
     (vifne processor operations)
     (vifne processor exception))
@@ -59,8 +58,7 @@
       ; Initialize the sub-libraries that must be able to message with the
       ; storage controller.  This is done like this to avoid import circles.
       (for-each (lambda (proc) (proc send* receive*))
-                (list cache:set-storage-comm!
-                      registers:set-storage-comm!
+                (list registers:set-storage-comm!
                       operations:set-storage-comm!))
 
       ; Save the chunk IDs of the startup-tasks stream, for when the processor
@@ -88,7 +86,6 @@
 
     (define (before-death)
       (registers:cleanup)
-      (cache:cleanup)
       (send* '(terminated)))
 
     (define (after-death)
@@ -100,9 +97,9 @@
   (define (instruction-interpreter)
 
     (define (get-inst id i)
-      (let-values (((inst-word ptr?) (inst-array-ref id i)))
-        (when ptr? (processor-exception 'invalid-instruction))
-        inst-word))
+      (let ((inst-word (array-ref id i)))
+        (when (fp? inst-word) (processor-exception 'invalid-instruction))
+        (fv inst-word)))
 
     ; Check if this process has been told to terminate.  Done between
     ; instructions to ensure they are not interrupted.

@@ -1,12 +1,3 @@
-Investigate making streams queue procedures to notify of elements, instead of
-having only one field that would be a conflict if more than one notifyee desires
-to be notified.  The same stream implementation can be used for such queue
-(maybe with a parameterization).
-
-Investigate not having processor caches, and instead always access mmap'ed
-storage.  Why have a cache that tries to be like a real machine, when the
-emulator is not going to be like a real machine in many other ways?
-
 Tests of streams: manual in repl, and new test/stream.vasm that uses multiple
 processors putting and getting from a stream.
 

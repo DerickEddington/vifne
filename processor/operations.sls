@@ -23,8 +23,8 @@
     (rnrs arithmetic bitwise)
     (rnrs hashtables)
     (vifne config)
+    (only (vifne storage) store-chunk! f fv fp?)
     (vifne processor registers)
-    (vifne processor cache)
     (vifne processor array)
     (vifne processor exception)
     (vifne log)
@@ -99,19 +99,15 @@
      (send* '(allocate))
      (let ((x (receive*)))
        (when (symbol? x) (processor-exception x))
-       (let* ((id (cadr x))
-              (c (new-chunk id)))
-         (let-values (((r i) (group-select src-grp grp-sel)))
-           ; Set the fields of the chunk according to the register group
-           ; selection, and increment the reference counts of any chunks now
-           ; referenced.
-           (for-each (lambda (r i)
-                       (chunk-set! c i (rv r) (rp? r))
-                       (when (rp? r) (send* `(increment ,(rv r)))))
-                     r i))
-         ; Store the chunk in the shared storage at this point in case another
-         ; processor needs to access the chunk.
-         (store-chunk! c)
+       (let ((id (cadr x)))
+         ; Set the fields of the chunk according to the register group
+         ; selection.  No other processors have access to the chunk, so it's
+         ; safe to directly write the mmap'ed memory here.
+         (store-chunk! id
+           (vector-map (lambda (r) (cond (r (when (rp? r) (send* `(increment ,(rv r))))
+                                            (f (rv r) (rp? r)))
+                                         (else (f 0 #F))))
+                       (group-select src-grp grp-sel)))
          ; Set the specified register to point to the chunk, but don't increment
          ; the reference count because the allocation already set it to 1.
          (r-set! dest id #T #F))))
@@ -121,23 +117,20 @@
                 (grp-sel  16 group-mask?)
                 (src      16 register-code?))
      (unless (rp? src) (processor-exception 'not-pointer))
-     (let ((c (get-data-chunk (rv src))))
-       (let-values (((r i) (group-select dest-grp grp-sel)))
-         (for-each (lambda (r i)
-                     (let-values (((v p?) (chunk-ref c i)))
-                       (r-set! r v p? #T)))
-                   r i))))
+     (vector-for-each (lambda (r f) (when r (r-set! r (fv f) (fp? f) #T)))
+                      (group-select dest-grp grp-sel)
+                      (load-chunk* (rv src))))
 
 
     ((set-multiple-immediates (dest-grp 16 register-code?)
                               (grp-sel  16 group-mask?))
-     (let-values (((r _) (group-select dest-grp grp-sel)))
-       (register-value-set! (sr II)
-         (fold-left (lambda (i r)
-                      (let-values (((v p?) (inst-array-ref (srv IS) i)))
-                        (r-set! r v p? #T))
-                      (+ 1 i))
-                    (srv II) r))))
+     (register-value-set! (sr II)
+       (fold-left (lambda (i r)
+                    (let ((x (array-ref (srv IS) i)))
+                      (r-set! r (fv x) (fp? x) #T))
+                    (+ 1 i))
+                  (srv II)
+                  (filter values (vector->list (group-select dest-grp grp-sel))))))
 
 
     ((set-immediate (dest 16 register-code?)
@@ -192,13 +185,13 @@
 
 
   (define (group-select reg sel)
-    (let ((group (bitwise-and #xFFF0 reg)))
-      (let loop ((i (- chunk-wsz 1)) (r '()) (n '()))
-        (if (negative? i)
-          (values r n)
-          (if (bitwise-bit-set? sel i)
-            (loop (- i 1) (cons (+ group i) r) (cons i n))
-            (loop (- i 1) r n))))))
+    (let ((group (bitwise-and #xFFF0 reg))
+          (r (make-vector chunk-wsz #F)))
+      (do ((i 0 (+ 1 i)))
+          ((= chunk-wsz i))
+        (when (bitwise-bit-set? sel i)
+          (vector-set! r i (+ group i))))
+      r))
 
 
   (define (arith proc dest src1 src2)

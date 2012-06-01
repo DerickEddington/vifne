@@ -13,7 +13,6 @@
     chunk-wsz
     default-storage-file
     register-set-size
-    cache-size
     limit-16bit
     exact-integer?
     exact-positive-integer?
@@ -33,7 +32,6 @@
   (define default-storage-file "shared-chunk-storage")
 
   (define register-set-size (* 16 chunk-wsz))
-  (define cache-size (expt 2 15))
 
   ;-----------------------------------------------------------------------------
 
