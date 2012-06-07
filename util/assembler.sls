@@ -267,11 +267,12 @@
                          (pair? (car forms))
                          (eq? 'import (caar forms))
                          (cdar forms)))
-           (forms (if imports (cdr forms) forms)))
+           (forms (if imports (cdr forms) forms))
+           (env (apply environment
+                       '(only (vifne util assembler high-lang) eval/accum!)
+                       (or imports '()))))
       (try (eval `(eval/accum! . ,forms)
-                 (apply environment
-                        '(only (vifne util assembler high-lang) eval/accum!)
-                        (or imports '())))
+                 env)
            "evaluation exception")))
 
   ;-----------------------------------------------------------------------------
