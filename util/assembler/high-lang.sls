@@ -55,7 +55,8 @@
     (rnrs arithmetic bitwise)
     (rnrs records syntactic)
     (vifne config)
-    (only (vifne storage) valid-id?))
+    (only (vifne storage) valid-id?)
+    (vifne util misc))
 
   (define (or? . preds) (lambda (x) (exists (lambda (p) (p x)) preds)))
 
@@ -218,14 +219,13 @@
 
 
   (define (chunk* . fields)
-    (define (rest) (vector->list (make-vector (- chunk-wsz (length fields)) 0)))
-    `(chunk . ,(append (map (lambda (x)
-                              (cond ((marked? x) (marked-value x))
-                                    ((word-integer? x) x)
-                                    ((label-ref? x) `(label ,x))
-                                    (else (error 'chunk "invalid argument" x))))
-                            fields)
-                       (rest))))
+    `(chunk . ,(list-extend (map (lambda (x)
+                                   (cond ((marked? x) (marked-value x))
+                                         ((word-integer? x) x)
+                                         ((label-ref? x) `(label ,x))
+                                         (else (error 'chunk "invalid argument" x))))
+                                 fields)
+                            chunk-wsz 0)))
 
   (define-syntax chunk
     ; This syntax prevents any existing accumulations from being affected by

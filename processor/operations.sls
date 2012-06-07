@@ -104,10 +104,10 @@
          ; selection.  No other processors have access to the chunk, so it's
          ; safe to directly write the mmap'ed memory here.
          (store-chunk! id
-           (vector-map (lambda (r) (cond (r (when (rp? r) (send* `(increment ,(rv r))))
-                                            (rf r))
-                                         (else (f 0 #F))))
-                       (group-select src-grp grp-sel)))
+           (map (lambda (r) (cond (r (when (rp? r) (send* `(increment ,(rv r))))
+                                     (rf r))
+                                  (else (f 0 #F))))
+                (group-select src-grp grp-sel)))
          ; Set the specified register to point to the chunk, but don't increment
          ; the reference count because the allocation already set it to 1.
          (r-set! dest (f id #T)))))
@@ -117,20 +117,19 @@
                 (grp-sel  16 group-mask?)
                 (src      16 register-code?))
      (unless (rp? src) (processor-exception 'not-pointer))
-     (vector-for-each (lambda (r f) (when r (r-set! r f #T)))
-                      (group-select dest-grp grp-sel)
-                      (load-chunk* (rv src))))
+     (for-each (lambda (r f) (when r (r-set! r f #T)))
+               (group-select dest-grp grp-sel)
+               (load-chunk* (rv src))))
 
 
     ((set-multiple-immediates (dest-grp 16 register-code?)
                               (grp-sel  16 group-mask?))
-     (sr-set! II
-       (f (fold-left (lambda (i r)
-                       (r-set! r (array-ref (srv IS) i) #T)
-                       (+ 1 i))
-                     (srv II)
-                     (filter values (vector->list (group-select dest-grp grp-sel))))
-          #F)))
+     (let ((i (fold-left (lambda (i r)
+                           (r-set! r (array-ref (srv IS) i) #T)
+                           (+ 1 i))
+                         (srv II)
+                         (filter values (group-select dest-grp grp-sel)))))
+       (sr-set! II (f i #F))))
 
 
     ((set-immediate (dest 16 register-code?)
@@ -185,13 +184,10 @@
 
 
   (define (group-select reg sel)
-    (let ((group (bitwise-and #xFFF0 reg))
-          (r (make-vector chunk-wsz #F)))
-      (do ((i 0 (+ 1 i)))
-          ((= chunk-wsz i))
-        (when (bitwise-bit-set? sel i)
-          (vector-set! r i (+ group i))))
-      r))
+    (let ((group (bitwise-and #xFFF0 reg)))
+      (do ((i 0 (+ 1 i))
+           (r '() (cons (and (bitwise-bit-set? sel i) (+ group i)) r)))
+          ((= chunk-wsz i) r))))
 
 
   (define (arith proc dest src1 src2)

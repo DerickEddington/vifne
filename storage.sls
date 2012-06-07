@@ -224,24 +224,31 @@
 
   (define (load-chunk id)
     ; Copy a chunk from shared storage.  Disallow if the chunk is guard tagged.
+    ; Incrementing the reference counts of chunks referenced by the chunk is not
+    ; done, so it can be done by other logic that knows how it should be done.
     (and (not (tagged? id guard-tag))
-         (let ((fields (make-vector chunk-wsz)))
-           (do ((i 0 (+ 1 i)))
-               ((= chunk-wsz i))
-             (vector-set! fields i (ref-field id i)))
-           fields)))
+         (let loop ((i (- chunk-wsz 1)) (a '()))
+           (if (negative? i) a
+               (loop (- i 1) (cons (ref-field id i) a))))))
 
   (define (store-chunk! id fields)
-    ; Copy a chunk to shared storage.
-    (define (ptr? i) (if (fp? (vector-ref fields i)) 1 0))
+    ; Copy a chunk to shared storage.  Changing the reference counts of chunks
+    ; referenced by the chunk is not done, so it can be done by other logic that
+    ; knows how it should be done.
+    (assert (>= chunk-wsz (length fields)))
     ; The destination must not be guard tagged, because guarded chunks must not
     ; have copies outside shared storage.
     (assert (not (tagged? id guard-tag)))
     (let ((m (id->ptr id)))
       (do ((i 0 (+ 1 i))
-           (ptrs 0 (bitwise-copy-bit ptrs i (ptr? i))))
-          ((= chunk-wsz i) (set-word! m pointer-flags-field ptrs))
-        (set-word! m i (fv (vector-ref fields i))))))
+           (ptrs 0 (bitwise-copy-bit ptrs i (if (fp? (car fields)) 1 0)))
+           (fields fields (cdr fields)))
+          ((null? fields)
+           (set-word! m pointer-flags-field ptrs)
+           (do ((i i (+ 1 i)))
+               ((= chunk-wsz i))
+             (set-word! m i 0)))
+        (set-word! m i (fv (car fields))))))
 
   ;-----------------------------------------------------------------------------
 
