@@ -147,6 +147,11 @@
      (r-set! dest (rf src) #T))
 
 
+  #;((equal? )
+     #|TODO compare two registers, both value and pointerness,
+     and store result in third register|#)
+
+
     ((ior (dest 16 register-code?)
           (src1 16 register-code?)
           (src2 16 register-code?))
@@ -158,6 +163,10 @@
           (src2 16 register-code?))
      (arith (lambda (a b) (let ((x (- a b))) (if (negative? x) (+ (expt 2 64) x) x)))
             dest src1 src2))
+
+
+  #;((jump-pointer? )
+     #|TODO If the register value is a pointer, jump|#)
 
 
     ((jump-zero (test  16 register-code?)
