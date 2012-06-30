@@ -47,7 +47,7 @@
   ; It is designed to be representable as standard textual datums (e.g. in
   ; files), and to support both instruction and data definition.
   ;
-  ; A <source> that is a (<form> ...) means to assemble an instruction-segment
+  ; A <source> that is a <segment> means to assemble an instruction-segment
   ; array-tree.
   ;
   ; A <source> that is a <chunk> means to assemble an arbitrary graph of chunks.
@@ -58,9 +58,10 @@
   ; A <data> that is a <word-integer> means a non-pointer literal integer value
   ; for a chunk field.  A <data> that is a (pointer <id-integer>) means a
   ; "magic" synthesized pointer value for a chunk field, used to bypass
-  ; capability-security, and this must be explicitly enabled.  Allowing <data>s
-  ; in instruction segments is intended for supporting immediate values.  It
-  ; could also be used to specify literal encoded instructions.
+  ; capability-security (this must be explicitly enabled elsewhere, to store it
+  ; in a storage file).  Allowing <data>s in instruction segments is intended
+  ; for supporting immediate values (it could also be used to specify literal
+  ; encoded instructions).
   ;
   ; A <chunk> means to construct a new graph of new chunks.  <chunk> graphs may
   ; occur in instruction segments.  And, any form, including instructions, may
@@ -80,10 +81,10 @@
   ; the index of the label.
 
 
-  (define (assemble-low source magic?)
+  (define (assemble-low source)
     ; This is the low-level assembler.  It translates low-level assembly
-    ; language forms into an encoded instruction-segment array-tree represented
-    ; as a graph of chunk records, or into an arbitrary chunk graph.
+    ; language forms into an encoded instruction-segment array-tree, or into an
+    ; arbitrary graph, represented as a graph of chunk records.
     (define (die msg . a) (apply error 'assemble-low msg a))
 
     (define (form? x) (or (instruction? x) (data? x) (label? x)))
@@ -183,9 +184,7 @@
       (define (data-trans)
         (cond ((integer? form) form)
               ((eq? 'pointer (car form))
-               (if magic?
-                 (new-magic-pointer (cadr form))
-                 (err "magic pointers not allowed")))
+               (new-magic-pointer (cadr form))
               ((eq? 'chunk (car form))
                (or (hashtable-ref CT form #F)
                    (let ((c (new-chunk (map transform (cdr form)))))

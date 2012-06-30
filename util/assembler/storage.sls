@@ -77,7 +77,7 @@
           c))))
 
 
-  (define (store! head)
+  (define (store! head magic?)
     ; Copy a graph of chunk records to the mmap'ed storage file by allocating
     ; new chunks in it, and return the chunk ID of the graph head.  Magic
     ; pointers are prevented from creating reference cycles, by checking that
@@ -110,6 +110,7 @@
                         (f* (or (hashtable-ref C v #F)
                                 (copy! v))))
                        ((magic-pointer? v)
+                        (unless magic? (die! "magic pointers not allowed" v))
                         (let ((v (magic-pointer-id v)))
                           (when (hashtable-ref M v #F)
                             (die! "magic pointer allocated for copy" v))

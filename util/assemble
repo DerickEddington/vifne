@@ -17,7 +17,8 @@
         (vifne util startup-tasks)
         (vifne start)
         (vifne config)
-        (vifne util command-line))
+        (vifne util command-line)
+        (vifne util pretty-print))
 
 (define (read-all p)
   (let loop ((a '()))
@@ -49,9 +50,13 @@
                          (true-string?) boolean?
                          #F)
 
-  ; If this is enabled, the assembler allows synthesizing pointers from numbers,
-  ; which bypasses capability-security, which sometimes is necessary for
-  ; manually constructing a system to run in the emulator.
+  (show-only? "-s"
+              (true-string?) boolean?
+              #F)
+
+  ; If this is enabled, synthesizing pointers from numbers is allowed, which
+  ; bypasses capability-security, which sometimes is necessary for manually
+  ; constructing a system to run in the emulator.
   (magic? "--magic"
           (true-string?) boolean?
           #F)
@@ -61,31 +66,40 @@
          (current-input-port)))
 
 
-(initialize-libraries! storage-file initialize-storage-file?)
+(define result
+  ; Assemble an instruction-segment array-tree, or an arbitrary chunk graph,
+  ; represented as Scheme-record chunks.  If language-level is high and
+  ; show-only? is true, don't actually assemble, but only show the low-level
+  ; forms produced by the high-level input.
+  (case language-level
+    ((high)
+     (let ((low-forms (assemble-high (read-all input))))
+       (if show-only?
+         low-forms
+         (assemble-low low-forms))))
+    ((low)
+     ; Low-level forms must all be in one datum, to distinguish between
+     ; instruction segment or chunk forms.
+     (assemble-low (read input)))))
 
-(define stored-id
-  ; Copy the assembled chunk graph into new chunks in the mmap'ed storage file.
-  (store!
-   ; Assemble an instruction-segment array-tree, or an arbitrary chunk graph,
-   ; represented as Scheme-record chunks.
-   (assemble-low (case language-level
-                   ((high)
-                    (assemble-high (read-all input)))
-                   ((low)
-                    ; Low-level forms must all be in one datum, to distinguish
-                    ; between instruction segment or chunk forms.
-                    (read input)))
-                 magic?)))
-
-; Print the chunk ID of the new graph in the mmap'ed storage file, so it can be
-; used in some other assembly (e.g. via pointer magic).
-(print stored-id)
-
-(when add-to-startup-tasks?
-  ; Put the new chunk graph in the storage file's startup-tasks stream, so it
-  ; will be executed when the emulator is started with the storage file.  Only
-  ; sensible for a chunk graph that is an instruction segment.  The -1 argument
-  ; causes the reference count to be adjusted to the desired 1, which is
-  ; necessary because of the count of 1 that store! gave and the incrementing
-  ; that putting in the stream does, i.e. 1 + 1 - 1 = 1.
-  (add-startup-task! stored-id -1))
+(cond
+  (show-only?
+   (pretty-print result))
+  (else
+   (initialize-libraries! storage-file initialize-storage-file?)
+   (let ((stored-id
+          ; Copy the assembled chunk graph into new chunks in the mmap'ed
+          ; storage file.
+          (store! result magic?)))
+     ; Print the chunk ID of the new graph in the mmap'ed storage file, so it
+     ; can be used in some other assembly (e.g. via pointer magic).
+     (print stored-id)
+     (when add-to-startup-tasks?
+       ; Put the new chunk graph in the storage file's startup-tasks stream, so
+       ; it will be executed when the emulator is started with the storage file.
+       ; Only sensible for a chunk graph that is an instruction segment.  The -1
+       ; argument causes the reference count to be adjusted to the desired 1,
+       ; which is necessary because of the count of 1 that store! gave and the
+       ; incrementing that referencing from a task chunk does, i.e. 1 + 1 - 1 =
+       ; 1.
+       (add-startup-task! stored-id -1)))))
