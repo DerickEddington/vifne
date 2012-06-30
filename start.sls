@@ -79,9 +79,9 @@
 
 
   (define (initialize-libraries! storage-file init-file?)
+    (main-pid-set! (getpid))
     (let-values (((addr size) (mmap-storage-file storage-file)))
-      (storage-set! addr size init-file? alloc-stream!)
-      (main-pid-set! (getpid))))
+      (storage-set! addr size init-file? alloc-stream!)))
 
 
   (define (start-emulator storage-file init-file? num-procs)
