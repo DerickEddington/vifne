@@ -40,8 +40,9 @@
   ;   <form> : <instruction> | <data> | <label>
   ;   <instruction> : (<mnemonic-symbol> <operand> ...)
   ;   <operand> : <exact-integer> | <label>
-  ;   <data> : <word-integer> | (pointer <id-integer>) | <chunk>
+  ;   <data> : <word-integer> | (pointer <id-integer>) | <chunk> | <recur>
   ;   <chunk> : (chunk <form> ...)
+  ;   <recur> : (assemble . <source>)
   ;   <label> : (label <symbol>)
   ;
   ; It is designed to be representable as standard textual datums (e.g. in
@@ -53,32 +54,40 @@
   ; A <source> that is a <chunk> means to assemble an arbitrary graph of chunks.
   ;
   ; An <instruction> means to encode the instruction as a non-pointer integer
-  ; value for a chunk field.
+  ; value for the corresponding chunk field.
   ;
   ; A <data> that is a <word-integer> means a non-pointer literal integer value
-  ; for a chunk field.  A <data> that is a (pointer <id-integer>) means a
-  ; "magic" synthesized pointer value for a chunk field, used to bypass
-  ; capability-security (this must be explicitly enabled elsewhere, to store it
-  ; in a storage file).  Allowing <data>s in instruction segments is intended
-  ; for supporting immediate values (it could also be used to specify literal
-  ; encoded instructions).
+  ; for the corresponding chunk field.  A <data> that is a (pointer <id-integer>)
+  ; means a "magic" synthesized pointer value for the corresponding chunk field,
+  ; used to bypass capability-security (this must be explicitly enabled
+  ; elsewhere, to store it in a storage file).  Allowing <data>s in instruction
+  ; segments is intended for supporting immediate values (it could also be used
+  ; to specify literal encoded instructions).
   ;
-  ; A <chunk> means to construct a new graph of new chunks.  <chunk> graphs may
-  ; occur in instruction segments.  And, any form, including instructions, may
-  ; occur in <chunk> graphs.  A <chunk> graph may contain identical <chunk>s
-  ; more than once, to represent multiple references to a chunk (but cycles
-  ; aren't allowed), and this is denoted with <chunk> datums that are eq?, and
-  ; this can be achieved in textual datums via (semi-standard) reader graph
-  ; syntax, e.g.  (chunk #0=(chunk ---) #0# ---).  Be careful to not cause
-  ; cycles in the datums, because that will cause algorithms to recur
-  ; infinitely.
+  ; A <chunk> means to construct a new graph of new chunks, and to make the
+  ; value for the corresponding chunk field be a pointer to it.  <chunk> graphs
+  ; may occur in instruction segments.  And, any form, including instructions,
+  ; may occur in <chunk> graphs.
+  ;
+  ; A <recur> means to recursively assemble a new chunk graph from an embedded
+  ; assembly, and to make the value for the corresponding chunk field be a
+  ; pointer to it.  This is especially useful for defining multiple
+  ; instruction-segments (e.g. internal procedures) from one assembly.
+  ;
+  ; An assembly may contain multiple identical <chunk>s or <recur>s, to
+  ; represent multiple references to the same chunk (but cycles aren't allowed),
+  ; and this is denoted with <chunk> or <recur> datums that are eq?, and this
+  ; can be achieved in textual datums via (semi-standard) reader graph syntax,
+  ; e.g. (chunk #0=(chunk ---) #0# ---).  Be careful to not cause cycles in the
+  ; datums, because that will cause algorithms to recur infinitely.
   ;
   ; A <label> names an index (offset from beginning) in an instruction segment.
   ; A <label> at the top level of a <segment> means to define a new label bound
   ; to the following index.  Such labels do not occur in the assembled output,
   ; and so do not affect the size nor indexes of a segment.  A <label> in an
   ; <instruction> or <chunk> means a reference to a label, and is replaced with
-  ; the index of the label.
+  ; the index of the label.  Labels in a <recur> are relative to the recursive
+  ; assembly.
 
 
   (define (assemble-low source)
@@ -92,7 +101,7 @@
     (define (instruction? x)
       (and (list? x) (pair? x)
            (symbol? (car x))
-           (not (memq (car x) '(pointer chunk label)))
+           (not (memq (car x) '(pointer chunk assemble label)))
            (for-all (lambda (o)
                       (or (exact-integer? o)
                           (label? o)
@@ -103,7 +112,8 @@
       (or (and (exact-integer? x)
                (or (word-integer? x) (die "not in word range" x)))
           (pointer? x)
-          (chunk? x)))
+          (chunk? x)
+          (recur? x)))
 
     (define (pointer? x)
       (and (named-list? 'pointer 2 x)
@@ -114,6 +124,10 @@
       (and (named-list? 'chunk (+ 1 chunk-wsz) x)
            (for-all (lambda (f) (or (form? f) (die "invalid form" f)))
                     (cdr x))))
+
+    (define (recur? x)
+      ; Note: validation of the rest is done in the recursive call to assemble.
+      (and (pair? x) (eq? 'assemble (car x))))
 
     (define (label? x)
       (and (named-list? 'label 2 x)
@@ -147,8 +161,8 @@
         (map R (remp label? segment)))
       (replace (defs)))
 
-    ; This table maps <chunk> datums to their corresponding chunk records, to
-    ; support chunks referred to more than once in a graph.
+    ; This table maps <chunk> and <recur> datums to their corresponding chunk
+    ; records, to support chunks referred to more than once.
     (define CT (make-eq-hashtable))
 
     (define (transform form)
@@ -182,26 +196,35 @@
                     (cdr sizes))))))
 
       (define (data-trans)
-        (cond ((integer? form) form)
-              ((eq? 'pointer (car form))
-               (new-magic-pointer (cadr form))
-              ((eq? 'chunk (car form))
-               (or (hashtable-ref CT form #F)
-                   (let ((c (new-chunk (map transform (cdr form)))))
-                     (hashtable-set! CT form c)
-                     c)))))
+        (define (do-chunk proc)
+          (or (hashtable-ref CT form #F)
+              (let ((c (proc)))
+                (hashtable-set! CT form c)
+                c)))
+        (if (integer? form) form
+            (case (car form)
+              ((pointer) (new-magic-pointer (cadr form)))
+              ((chunk) (do-chunk (lambda () (new-chunk (map transform (cdr form))))))
+              ((assemble)
+               ; Recurring with assemble (not assemble-low) is done to use the
+               ; same CT hashtable across recursive assemblies, to support
+               ; identical chunk references across recursive assemblies.
+               (do-chunk (lambda () (assemble (cdr form))))))))
 
       (cond
         ((data? form) (data-trans))
         ((instruction? form) (encode))
         (else (err "invalid form"))))
 
-    (cond
-      ((and (pair? source) (eq? 'chunk (car source)))
-       (transform source))
-      ((list? source)
-       (list->array-tree (map transform (labels->indexes source))))
-      (else (die "invalid source" source))))
+    (define (assemble source)
+      (cond
+        ((and (pair? source) (eq? 'chunk (car source)))
+         (transform source))
+        ((list? source)
+         (list->array-tree (map transform (labels->indexes source))))
+        (else (die "invalid source" source))))
+
+    (assemble source))
 
 
   (define (list->array-tree fields)
@@ -278,6 +301,6 @@
 
   ; The special forms of the low-level language must not conflict with defined
   ; instruction operation mnemonics.
-  (assert (not (exists get-operation-info '(pointer chunk label))))
+  (assert (not (exists get-operation-info '(pointer chunk assemble label))))
 
 )

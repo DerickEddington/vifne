@@ -35,6 +35,7 @@
     pointer
     chunk
     label
+    assemble
 
     ignore
     chunk-create
@@ -156,13 +157,12 @@
   (define (check-arg operand pred who)
     (unless (pred operand) (error who "invalid argument" operand)))
 
-  (define-syntax accum!/mark
-    (syntax-rules ()
-      ((_ expr)
-       (let ((form expr))
-        (accum! form)
-        (make-marked form)))))
+  (define (accum!/mark form)
+    (accum! form)
+    (make-marked form))
 
+  ; This exists to support validity checking of chunk forms of the high-lang.
+  ; Only datums that are valid low-lang <form>s may be marked.
   (define-record-type marked (fields value))
 
 
@@ -238,6 +238,13 @@
                                          (let ((l (list expr ...)))
                                            (end-accum!)
                                            l)))))))
+
+  (define-syntax assemble
+    ; This syntax prevents any existing accumulations from being affected by
+    ; evaluating the arguments.
+    (syntax-rules ()
+      ((_ . body)
+       (accum!/mark `(assemble . ,(eval/accum! . body))))))
 
 
   (define-syntax eval/accum!
