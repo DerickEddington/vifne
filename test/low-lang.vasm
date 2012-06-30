@@ -22,11 +22,12 @@
  (sub #xFF #xFF 1)
  (jump-positive #xFF (label loop))
 
- (set-immediate #xA8 (label skip))
- (jump-positive 1 #xA8) ; Unconditional jump.
+ ; Unconditional jump.
+ (set-immediate #xA8 1)
+ (jump-positive #xA8 (label skip))
 
  (chunk-get #xC0 #x4400 #x2B)
- (goto #xCE #xCA)
+ (goto #xCE)
 
  (label skip)
  (ignore)

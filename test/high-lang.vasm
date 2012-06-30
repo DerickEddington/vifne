@@ -29,11 +29,12 @@
   (sub c c one)
   (jump-positive c 'loop))
 
-(set-immediate rA8 'skip)
-(jump-positive r1 rA8)   ; Unconditional jump.
+; Unconditional jump.
+(set-immediate rA8 1)
+(jump-positive rA8 'skip)
 
 (chunk-get (group rCE rCA) r2B)
-(goto rCE rCA)
+(goto rCE)
 
 (label 'skip)
 (ignore)
