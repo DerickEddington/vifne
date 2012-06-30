@@ -169,6 +169,9 @@
      #|TODO If the register value is a pointer, jump|#)
 
 
+    ; TODO: These conditions are probably inadequate - they don't support
+    ; overflow/underflow etc.
+
     ((jump-zero (test  16 register-code?)
                 (index 32 unsigned-32bit?))
      (jump zero? test index))
@@ -176,12 +179,12 @@
 
     ((jump-positive (test  16 register-code?)
                     (index 32 unsigned-32bit?))
-     (jump positive? test index))
+     (jump (lambda (v) (and (not (bitwise-bit-set? v 63)) (positive? v))) test index))
 
 
     ((jump-negative (test  16 register-code?)
                     (index 32 unsigned-32bit?))
-     (jump negative? test index))
+     (jump (lambda (v) (bitwise-bit-set? v 63)) test index))
 
 
     ((goto (seg 16 register-code?))
