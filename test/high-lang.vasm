@@ -1,3 +1,4 @@
+#!r6rs
 ; Contrived to excercise some assembly.  TODO: Delete when there are better tests.
 
 (import (vifne util assembler high-lang)

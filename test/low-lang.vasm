@@ -1,3 +1,4 @@
+#!r6rs
 ; Contrived to excercise some assembly.  TODO: Delete when there are better tests.
 (
  (set-immediate 0 #x12345678)
