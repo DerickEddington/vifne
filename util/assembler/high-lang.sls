@@ -45,6 +45,7 @@
     copy
     ior
     sub
+    jump
     jump-zero
     jump-positive
     jump-negative
@@ -199,6 +200,9 @@
 
     (sub ((dest register?) (src1 register?) (src2 register?))
      (map register-code (list dest src1 src2)))
+
+    (jump ((index (or? unsigned-48bit? label-ref?)))
+     (list (maybe-label index)))
 
     (jump-zero ((test register?) (index (or? unsigned-32bit? label-ref?)))
      (list (register-code test) (maybe-label index)))

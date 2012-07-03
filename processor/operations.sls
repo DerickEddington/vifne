@@ -165,6 +165,10 @@
             dest src1 src2))
 
 
+    ((jump (index 48 unsigned-48bit?))
+     (sr-set! II (f index #F)))
+
+
   #;((jump-pointer? )
      #|TODO If the register value is a pointer, jump|#)
 
@@ -174,17 +178,17 @@
 
     ((jump-zero (test  16 register-code?)
                 (index 32 unsigned-32bit?))
-     (jump zero? test index))
+     (jump/? zero? test index))
 
 
     ((jump-positive (test  16 register-code?)
                     (index 32 unsigned-32bit?))
-     (jump (lambda (v) (and (not (bitwise-bit-set? v 63)) (positive? v))) test index))
+     (jump/? (lambda (v) (and (not (bitwise-bit-set? v 63)) (positive? v))) test index))
 
 
     ((jump-negative (test  16 register-code?)
                     (index 32 unsigned-32bit?))
-     (jump (lambda (v) (bitwise-bit-set? v 63)) test index))
+     (jump/? (lambda (v) (bitwise-bit-set? v 63)) test index))
 
 
     ((goto (seg 16 register-code?))
@@ -207,7 +211,7 @@
     (r-set! dest (f (proc (rv src1) (rv src2)) #F)))
 
 
-  (define (jump pred test index)
+  (define (jump/? pred test index)
     (when (rp? test) (processor-exception 'pointer))
     (when (pred (rv test)) (sr-set! II (f index #F))))
 

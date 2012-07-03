@@ -19,6 +19,7 @@
     exact-non-negative-integer?
     signed-32bit?
     unsigned-32bit?
+    unsigned-48bit?
     word-integer?
     non-negative-word-integer?)
   (import
@@ -53,6 +54,8 @@
     (and (exact-integer? x) (<= (- (expt 2 31)) x (- (expt 2 31) 1))))
   (define (unsigned-32bit? x)
     (and (exact-integer? x) (<= 0 x (- (expt 2 32) 1))))
+  (define (unsigned-48bit? x)
+    (and (exact-integer? x) (<= 0 x (- (expt 2 48) 1))))
 
   (define (word-integer? x)
     (and (exact-integer? x) (<= word-min-signed x word-max-unsigned)))
