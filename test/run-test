@@ -1,0 +1,41 @@
+#! /bin/bash
+
+# Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+# LICENSE from the original collection this file is distributed with.
+
+# argument  1  = filename of test program
+# arguments 2+ = arguments to pass to Vifne emulator (optional)
+
+DSFN=shared-chunk-storage
+DSFS=$((2**19)) # 524288 bytes, 2048 chunks
+
+# Directory of Vifne, gotten from name of this script.
+V=$(dirname "$0")/..
+V=$(realpath "$V")
+
+TEST=${1:?must give test filename}
+TEST=$(realpath "$TEST")
+# Relative path for test-run directory, derived from name of test file relative
+# to Vifne directory minus extension.
+D=${TEST%.*} # Minus extension.
+D=test/${D#$V/test/} # Minus Vifne directory prefix.
+
+# Display following commands.
+PS4="# "
+set -x
+
+# Make a directory, in the current directory, named after the test name, for the
+# fresh storage file and for the files output from running the test (redirected
+# stdio streams of emulator processes, and maybe log files).
+mkdir -p "$D"  &&
+cd "$D"  &&
+
+# Make a fresh storage file.
+"$V/util/make-sparse-file"  $DSFN  ${STORAGE_FILE_SIZE:-$DSFS}  &&
+
+# Assemble the test program, store it in the storage file, and put it in the
+# startup-tasks stream.
+"$V/util/assemble"  -i true  -a true  "$TEST"  &&
+
+# Run the emulator with the storage file containing the test program.
+"$V/vifne" "${@:2}"
