@@ -1,0 +1,14 @@
+0.8: Initial public release.  Alpha state.  Comprehensive documentation not
+completed.  Hopefully public feedback helps improve documentation and maybe
+design.
+
+0.9: Beta state.  Comprehensive documentation and source comments completed.
+INDEX files in each directory that succinctly explain files of directories.
+Hopefully public feedback helps notice and improve design flaws.
+
+0.9.x: Any design changes before stabilizing for 1.x series.
+
+1.0: First stable release.  1.x series will maintain stable API for public's
+long-term use.
+
+1.x: Any improvements or enhancements that do not affect stability of 1.x API.
