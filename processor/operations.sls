@@ -201,9 +201,9 @@
 
   (define (group-select reg sel)
     (let ((group (bitwise-and #xFFF0 reg)))
-      (do ((i 0 (+ 1 i))
+      (do ((i (- chunk-wsz 1) (- i 1))
            (r '() (cons (and (bitwise-bit-set? sel i) (+ group i)) r)))
-          ((= chunk-wsz i) r))))
+          ((negative? i) r))))
 
 
   (define (arith proc dest src1 src2)
