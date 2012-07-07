@@ -1,0 +1,13 @@
+[The Ready Tasks Queue of Vifne is the analog of the Deferred Tasks Queue of
+Fresh Breeze.]
+
+To keep the emulator simple and focused on higher-level exploration, the
+Deferred Tasks Queue could be the only way that processors get new tasks.
+Unlike the F.B. design which also has Active Task List and Pending Task Queue
+and algorithms for when to steal from another processor's PTQ or when to get
+from the DTQ and an inter-processor network for communicating.
+
+Having only a DTQ will not change the semantics from the software's perspective,
+I think, because in the F.B. design tasks might be taken from the DTQ at any
+time.  The software will see spawn and join semantics the same as if there was
+also PTQ (and ATL) involved. (Right?)

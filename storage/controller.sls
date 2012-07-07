@@ -29,7 +29,8 @@
       (set! processors (make-vector num-procs 'unregistered))
       (controller-loop))
     (define (before-death)
-      (assert (all-terminated?)))
+      (assert (all-terminated?))
+      (clear-waiters! (ready-tasks-head))) ; Not needed across restarts.
     (define (after-death)
       (destroy-message-queue name))
     (values name main before-death after-death))

@@ -1,0 +1,43 @@
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+(import (vifne util assembler high-lang)
+        (vifne test lang-util)
+        (rnrs))
+
+; A simple calling convention.
+(define arg r2A)
+(define ret r3B)
+
+(define (proc1)
+  ; Assemble into an instruction segment to embed in the top-level assembly.
+  (assemble
+   ; Use some registers the caller needs to save.
+   (set-immediate r0 1)
+   (set-immediate r1 2)
+   (ior r1 r0 r1)
+   ; Use the argument and set the return value.
+   (sub ret arg r1)
+   (return)))
+
+; Set a register to point to proc1's instruction segment.
+(set-multiple-immediates (group r17))
+; The low-lang assemble-form is accumulated here and referenced by the top-level
+; instruction segment.  In a sense, the top-level I.S. is a closure over proc1.
+(proc1)
+; Set registers to test after call.
+(set-immediate r0 #x76543210)
+(set-immediate r1 #x12345678)
+(set-immediate ret #x717771)
+; Set the argument to pass.
+(set-immediate arg 9)
+; Call, saving r0 and r1.
+(call r17 r0 r1)
+; Return point.
+(test ret 6)
+(test r0 #x76543210)
+(test r1 #x12345678)
+
+; Nothing to return to, so done.
+(done)

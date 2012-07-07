@@ -1,5 +1,3 @@
-Tests of streams: manual in repl, and new test/stream.vasm that uses multiple
-processors putting and getting from a stream.
 
 Investigate if it's possible for a chunk to be freed by a processor while
 another processor still intends to use it.  E.g. processor A decides to use a
@@ -21,7 +19,7 @@ loops will have to be unrolled so that the required registers can be specified.
 
 Need to carefully analyze reference counting to prove it all correct.
 
-It seems possible to create a reference cycle by putting in a stream a chunk
+It is possible to create a reference cycle by putting in a stream a chunk
 that references one of the stream's handles:
   chunk -> handle -> stream -> elements -> chunk
 This could prevent all chunks in the cycle from being freed, even if there are
@@ -30,6 +28,13 @@ the last outside reference to the stream is cleared.  I think this can't be
 prevented.  This is only a problem if it's desired to lose all references to a
 stream even if there are elements in it, which seems uncommon, however this is
 very reasonable to expect to be able to do.  Not sure what to do about this...
+-- "To guarantee that a cycle cannot be created, the stream chunk is marked as
+being of a special stream type, and can only be referenced by the "next"
+reference in another chunk of stream type. This sort of mechanism is similar to
+that of "incremental arrays"".
+-- Not sure what this means exactly nor how you're supposed to use streams if
+they can't be referenced by non-streams.
+
 
 Need to be careful about deadlocking the SMS or a processor because of
 message-queue operations blocking.  What if the SMS replies to a processor but

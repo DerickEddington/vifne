@@ -28,14 +28,12 @@
   (define sid)
   (define storage)
   (define replies)
-  (define startup-tasks-head-id)
-  (define startup-tasks-tail-id)
 
   (define (send* x) (send storage (cons* (car x) sid (cdr x))))
   (define (receive*) (receive replies))
 
 
-  (define (start-processor n sth stt)
+  (define (start-processor n sth rth rtt)
     (define name (string-append "processor" (number->string n)))
 
     (define (main)
@@ -56,41 +54,50 @@
       ; Get the ID the storage controller assigned to this processor.
       (set! sid (cadr (receive*)))
 
-      ; Initialize the sub-libraries that must be able to message with the
-      ; storage controller.  This is done like this to avoid import circles.
-      (for-each (lambda (proc) (proc send* receive*))
-                (list registers:set-storage-comm!
-                      operations:set-storage-comm!))
+      ; Initialize the sub-libraries.  This is done like this to avoid import
+      ; circles.
+      (registers:initialize! send*)
+      (operations:initialize! send* receive* rth rtt
+        ; The first process to do this will create this queue, the others will
+        ; just open it.
+        (create-or-open-message-queue "waiting-processors"))
 
-      ; Save the chunk IDs of the startup-tasks stream, for when the processor
-      ; stops.
+      #|; Save the chunk IDs of the startup-tasks stream, for when the processor
+      ; stops.  TODO: Why? What was my thinking?  For automatic freezing of
+      ; active tasks?
       (set! startup-tasks-head-id sth)
-      (set! startup-tasks-tail-id stt)
+      (set! startup-tasks-tail-id stt)|#
 
       ; Start executing instructions.
-      (send* `(stream-get ,startup-tasks-head-id #F))
+      (send* `(stream-get ,sth #F #F))
       (let ((x (receive*)))
         (if (list? x)
           (let ((x (cadr x)))
             (assert (fp? x))
-            ; Set the Instruction Segment register to point to the instruction
-            ; segment gotten from the stream, but don't increment the reference
-            ; count because stream-get already incremented it.
-            (sr-set! IS x)
-            ;(sr-set! II (f 0 #F))  Already initialized to this.
-            (instruction-interpreter))
+            ; Prepare to transfer control to the task.
+            (activate (fv x))
+            ; Lose reference to task chunk. (What it referenced is now
+            ; referenced by registers).
+            (send* `(decrement ,(fv x))))
           (begin
             (assert (eq? 'stream-empty x))
-            ; TODO?: Wait for tasks to become available via stealing from
-            ; another processor's PTQ or from the global DTQ.
-            ))))
+            ; Wait for a task to become available in the global RTQ.
+            (activate-ready-task))))
+      ; Execute instructions.
+      (instruction-interpreter))
 
     (define (before-death)
-      (registers:cleanup)
+      (clear-registers!)
       (send* '(terminated)))
 
     (define (after-death)
-      (destroy-message-queue name))
+      (destroy-message-queue name)
+      ; This will raise an exception for all but one processor process.  The
+      ; parent process will abort an after-death because of an exception, so
+      ; this must be the last command of this procedure.  The exception is not
+      ; suppressed here, so a log of it being ignored is recorded, in case it's
+      ; not the expected exception.
+      (destroy-message-queue "waiting-processors"))
 
     (values name main before-death after-death))
 
@@ -103,7 +110,8 @@
         (fv inst-word)))
 
     ; Check if this process has been told to terminate.  Done between
-    ; instructions to ensure they are not interrupted.
+    ; instructions to ensure they are not interrupted (only SIGKILL or computer
+    ; failure can interrupt, hopefully).
     (unless (memq 'SIGTERM (sigpending))
       ; Execute an instruction.
       (assert (srp? IS))

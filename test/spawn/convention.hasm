@@ -1,0 +1,105 @@
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+(import (vifne util assembler high-lang)
+        (vifne test lang-util)
+        (rnrs base))
+
+; Spawn of procedure that could also be directly called.  The spawned task is a
+; helper that prepares the argument registers for the calling-convention of the
+; procedure, then calls the procedure, then puts the values returned by the
+; procedure in the join stream of the spawner.
+
+(define (helper)
+  ; Argument-passing convention for spawning.
+  (define meta-args r0)
+  (define packed-args r1)
+  ; Argument-passing convention for calling.
+  (define call-args (group r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 rA rB rC rD rE rF))
+  (define ret-args call-args)
+  ; Meta arguments are the callee instruction segment and the parent's join
+  ; stream and join tag.
+  (define callee r10)
+  (define join-tag r11)
+  (define join-stream r12)
+  ; Other used registers.
+  (define packed-ret r10)
+  (define join-ret r10)
+  (assemble
+   (chunk-get (group callee join-tag join-stream) meta-args)
+   ; Must extract meta arguments before call arguments, because r0 is used for both.
+   (chunk-get call-args packed-args)
+   ; Call the given callee, with argument registers now set, and save the join info
+   ; across the call.
+   (call callee join-stream join-tag)
+   ; Pack the returned values into a chunk.
+   (chunk-create packed-ret ret-args)
+   ; Pair the given join-tag with the returned values chunk, and put this in the
+   ; join-stream.
+   (chunk-create join-ret (group packed-ret join-tag))
+   (stream-put join-stream join-ret)
+   ; Nothing to return to, so done.
+   (done)))
+
+(define (foo)
+  (assemble
+   (define arg0 r0) (define arg1 r1) (define arg2 r2)
+   (define ret0 arg0)
+   (sub ret0 arg0 arg1)
+   (sub ret0 ret0 arg2)
+   (return)))
+
+(define callee r10)
+(define tag r11)
+(define join-tail r12)
+(define help r13)
+(define join-head r14)
+(define i r15)
+(define c r16)
+(define one r17)
+(define save r18)
+(define ret r10)
+(define meta r0)
+(define args r1)
+
+(set-multiple-immediates (group callee help))
+(foo)
+(helper)
+(set-immediate r30 7)
+(set-immediate r31 4)
+(set-immediate r32 1)
+(stream-create join-head join-tail)
+(set-immediate tag 717)
+(chunk-create meta (group callee tag join-tail))
+(chunk-create args (group r30 r31 r32))
+
+(set-immediate c (prompt/nat "Spawn/convention spawn amount: "))
+(copy i c)
+(set-immediate one 1)
+(label 'loop2)
+(sub i i one)
+(jump-negative i 'done2)
+(spawn help meta args)
+(jump 'loop2)
+(label 'done2)
+
+(copy i c)
+(label 'loop3)
+(sub i i one)
+(jump-negative i 'done3)
+(chunk-create save (group join-head i one))
+(stream-get ret join-head save)
+; Execution will be suspended if the join stream is empty.
+(chunk-get (group ret tag) ret)
+(chunk-get (group r0) ret)
+; (A real program might accumulate the results and use the tags to correlate them with
+; their respective particular spawns.)
+(test tag 717)
+(test r0 2)
+(chunk-get (group join-head i one) save)
+(jump 'loop3)
+(label 'done3)
+
+; Nothing to return to, so done.
+(done)

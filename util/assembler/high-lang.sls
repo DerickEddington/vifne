@@ -49,7 +49,16 @@
     jump-zero
     jump-positive
     jump-negative
-    goto)
+    goto
+    call
+    return
+    spawn
+    done
+    yield
+    stream-create
+    stream-put
+    stream-get
+    exception)
   (import
     (rnrs base)
     (rnrs control)
@@ -214,7 +223,34 @@
      (list (register-code test) (maybe-label index)))
 
     (goto ((segment register?))
-     (list (register-code segment))))
+     (list (register-code segment)))
+
+    (call ((segment register?) (save0 register?) (save1 register?))
+     (map register-code (list segment save0 save1)))
+
+    (return () '())
+
+    (spawn ((segment register?) (arg0 register?) (arg1 register?))
+     (map register-code (list segment arg0 arg1)))
+
+    (done () '())
+
+    (yield ((save0 register?) (save1 register?))
+     (map register-code (list save0 save1)))
+
+    (stream-create ((head register?) (tail register?))
+     (map register-code (list head tail)))
+
+    (stream-put ((tail register?) (value register?))
+     (map register-code (list tail value)))
+
+    (stream-get ((dest register?) (head register?) (save register?))
+     (map register-code (list dest head save)))
+
+    (exception ((code unsigned-32bit?))
+     (list code))
+
+    )
 
 
   (define (data val)

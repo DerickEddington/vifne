@@ -8,6 +8,7 @@
   (export
     create-message-queue
     open-message-queue
+    create-or-open-message-queue
     destroy-message-queue
     send
     receive)
@@ -15,6 +16,7 @@
     (rnrs base)
     (rnrs records syntactic)
     (rnrs exceptions)
+    (rnrs conditions)
     (rnrs io ports)
   #;(rnrs io simple)
     (rnrs bytevectors)
@@ -61,6 +63,13 @@
 
   (define (open-message-queue name)
     (with-buffer buf (open-message-queue* name 'write buf)))
+
+  (define (create-or-open-message-queue* name mode buf)
+    (guard (ex ((error? ex) (open-message-queue* name mode buf)))
+      (create-message-queue* name mode buf)))
+
+  (define (create-or-open-message-queue name)
+    (with-buffer buf (create-or-open-message-queue* name 'read/write buf)))
 
   (define (destroy-message-queue name) (mq_unlink (fmt name)))
 

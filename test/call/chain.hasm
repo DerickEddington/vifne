@@ -1,0 +1,17 @@
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+(import (vifne util assembler high-lang)
+        (vifne test call return-linkage)
+        (rnrs base))
+
+; Chain calling.  Accumulates chained return linkages and so does consume
+; storage.  Potentially consumes a lot, depending on given count.  Potentially
+; causes storage-full processor-exception, depending on size of storage file.
+(return-linkage-test
+ (lambda (seg) (call seg rFF rFF)) ; (Don't actually care about saving any registers.)
+ "Chain-call")
+
+; Nothing to return to, so done.
+(done)

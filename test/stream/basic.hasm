@@ -1,0 +1,39 @@
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+; TODO: Change this to also ask for amount to put/get at once (per loop), to
+; test having many elements in a stream at a time.
+
+(import (vifne util assembler high-lang)
+        (vifne test lang-util)
+        (rnrs base))
+
+; Basic, single-thread, no blocking.
+
+(define h r0)
+(define t r1)
+(define i r2)
+(define x r3)
+(define one r4)
+
+(set-immediate one 1)
+
+(stream-create h t)
+
+(set-immediate i (prompt/nat "Stream/basic loop count: "))
+(jump-positive i 'loop)
+(jump 'done)
+
+(label 'loop)
+(stream-put t i)
+(stream-get x h rFF) ; (Saved register rFF doesn't matter for this test.)
+(sub x x i)
+(test x 0)
+(sub i i one)
+(jump-positive i 'loop)
+
+(label 'done)
+
+; Nothing to return to, so done.
+(done)

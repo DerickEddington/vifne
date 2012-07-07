@@ -1,0 +1,161 @@
+Because streams do mutation, it is possible that cycles can be created.  E.g. If
+a chunk that references a stream handle, directly or transitively, is put in the
+same stream: chunk ->* handle -> stream -> elements -> chunk
+
+Solution idea:
+
+A chunk has metadata that says what streams it references, directly or
+transitively.  When a new chunk is created, its such metadata is the union of
+any chunks it references.  TODO: about how this could be implemented as pointer
+to stream-handle-tagged chunk or pointer to list of SHT pointers or null.
+
+For this to work, I think that in addition to tracking what streams are
+reachable from a chunk, must also track what chunk directly references such
+reachable streams.  I.e. a tracked datum is a pair of a pointer to a stream and
+a pointer to the chunk that directly references the corresponding stream.  This
+way, a stream can know how many unique refs to itself exist in any cycle(s) (by
+checking, for each indicated referenced-stream, how many distinct
+referencing-chunks are paired with the indication), so it can be known by what
+amount to adjust the reference count free limit.  For example, if a stream has
+two elements that both reach the same chunk that references the stream, then
+there are two cycles but only one reference in the cycles that contributes to
+the stream's refcount, and so when the stream's refcount is decremented to 1
+then there are no non-cycle refs and so the stream should be freed.  Another
+example, if a stream has two elements that reach distinct chunks that reference
+the stream, then there are two cycles and two references in the cycles that
+contribute to the stream's refcount, and so when the stream's refcount is
+decremented to 2 then there are no non-cycle refs and so the stream should be
+freed.  Note that I think decr-refcount will have to be careful not to recur
+infinitely (nor excessively) because of reference cycle(s) as it follows and
+decrements sub-references.
+
+To lessen the expense of tracking what streams are referenced by chunks, all
+chunk fields (and registers) will have an additional tag bit that indicates
+whether a pointer points to a chunk from which a stream is reachable.  This way,
+loading from storage the metadata for what streams are reachable from a chunk
+does not need to be done for chunks that don't reach any streams, when creating
+a new chunk.  I.e. when creating a new chunk, to create its metadata that
+indicates what streams are reachable from it, the such metadata of all chunks to
+be referenced by the new chunk must be combined, but if a field/pointer tag bit
+indicates a referenced chunk does not reach any streams, then loading such
+chunks' metadata is unnecessary.  Otherwise, every chunk-creation operation
+would have to load from storage the metadata of every to-be referenced chunk to
+know what if any streams are reachable from these chunks.  Stream-reaching
+chunks will be the minority, so it seems quite worthwhile to avoid so much
+unnecessary loading of metadata.
+
+For this solution to all come together, the stream implementation will have to
+be changed so that every time an element is put into or taken from a stream, the
+stream's set of indications of what streams are reachable from it will have to
+be updated, and from this set the stream's refcount-free-limit will have to be
+updated.  All this will be done be the storage controller, serialized so that
+the operations complete atomically and are concurrency-safe.
+
+An interesting case to consider is when a stream has an element that reaches the
+stream and so there is a cycle, and thus the stream's refcount-free-limit is
+adjusted up for this.  Then that element is taken out of the stream, which
+causes the stream's refcount-free-limit to be readjusted down, which means that
+the reference to the stream in the taken element is now counted as a non-cycle
+reference, i.e. this reference now contributes to keeping the stream alive,
+which is desired.
+
+TODO: weak idea isn't quite right.  Don't want weak refs, but want streams to
+know how many cycle refs to themselves there are, so that decr-refcount!
+operation can know to free a stream when its refcount is decremented to the
+number of cycle refs (which means there are no more refs outside the cycle(s)).
+
+When a chunk ref is put in a stream, it is checked if the chunk's metadata says
+it references the stream.  If so, the stream's ref to the chunk is weak,
+i.e. does not increment the chunk's ref count, to prevent ref count cycle.
+
+If there will be no other references to such a chunk put in a stream, i.e. the
+weak ref the stream has to the chunk will be the only ref to it, the chunk must
+be prevented from being freed when the last non-weak ref is lost, i.e. when
+decr-refcount! is done.
+
+Is the challenge that, for a ref cycle between stream and an element of the
+stream, and when the stream has the only ref to the element, if the stream
+itself is ref'd and so should be kept alive then the element must be kept alive,
+but if all refs to stream are lost then the stream and the element should both
+be freed.  ?
+
+The primary goal is that, if a cycle exists between a stream and one or more of
+its elements, and all references to the stream, other than those in cycles, are
+lost then the stream should be freed.
+
+TODO: think about how this idea compounds with itself if a graph references
+multiple streams and the graph is simultaneously put in multiple of the streams.
+Ref count cycles should be prevented for each stream, and the desirable
+semantics, of still being able to have the only refs to the graph be in the
+streams without the graph being freed, must still work.
+
+TODO: think about how this idea works with all the possibilities for cycles: a
+stream has multiple elements that have cycle to it; or stream A has element that
+refs (maybe transitively) stream B ... which has element that refs* stream X
+... which has element that refs stream A, thus a cycle exists with stream A.
+
+------
+
+Hmm, what about the issue that cycles can be created through multiple streams by a
+stream having as element another stream and after stream A is put in stream B
+then stream B is put in stream A.
+
+How does this affect the above idea for dealing with cycles?  When stream A is
+put in stream B, stream B checks if stream A references stream B, and at that
+time it does not and so stream B proceeds as such.  But then, after stream B
+refs stream A, stream B is put in stream A thus creating a cycle, and it's too
+late for stream B to know.
+
+But stream A can see that stream B refs stream A.  So, does this mean that the
+above idea still can work?  I suspect so.
+
+
+
+
+[Old ideas:]
+
+It seems a way to prevent this is to tag all chunks that reference a
+stream, including those that only reference a stream transitively.  I.e. when
+creating/defining a new chunk, if any of the to-be-referenced chunks are tagged
+as stream-referencing then the new chunk is also tagged as such.
+
+(This solution is not so good because it'd prevent putting a chunk that
+references any stream in another stream even if the streams are different and a
+cycle would not exist.)
+
+This solution poses a challenge for procedures that desire to save a reference
+to a stream across a possibly-suspending stream-get, because the suspended task
+chunk needs to reference the stream but the stream needs to reference the task
+chunk thus requiring a cycle.
+
+I think the solution is to not save a reference to a stream in a suspended task,
+but to have stream-put set a reference to the stream in the task ...
+DAMN stream-put only has a reference to the tail handle, while a task suspended
+on stream-get needs the head handle.
+A Stream chunk could also reference its handles, to enable stream-put to set a
+reference to the stream's head handle in a stream-get resume task.
+
+But, a solution to restore reference to head handle still does not solve
+problem of wanting to save reference to tail handle across stream-get but this
+causing cycle.
+
+The system could automagically setup a stream-get resume task to have references
+to both head and tail handles, however this would violate capability security if
+the task didn't previously have a reference to the tail.  (The reason I made
+head and tail handles, instead of referring to the stream chunk directly, was to
+enable cap-sec for when only need ref of head or tail but not both.)
+
+To solve this, seems like could check if save registers are tagged as
+stream-referencing.  If so, check if register value is reference to handle, or
+if ref to chunk, check if the chunk refs one or both handles, but don't check
+any deeper levels.  Then ...?  Anything that passes the check can't be actually
+be saved in the resume task chunk because that would cause a cycle, so upon
+resumption could set save register to refer to handle.  But what about scenario
+where it's desired to save both handles and other data? - there's only two save
+slots.
+
+-------
+
+I don't understand J.Dennis' comment about how cycles are prevented via stream
+chunk tagging.  He references the mechanism being similar to that of incremental
+arrays, so I should learn about that.

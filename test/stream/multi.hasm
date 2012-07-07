@@ -1,0 +1,60 @@
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+(import (vifne util assembler high-lang)
+        (vifne test lang-util)
+        (rnrs base)
+        (rnrs io simple))
+
+; Allocate a stream, spawn N threads that put to the stream endlessly, and spawn
+; 2N threads that get from the stream endlessly.
+
+(define h r0)
+(define t r1)
+(define i r2)
+(define one r3)
+(define p r4)
+(define g r5)
+
+(define (putter)
+  (define n i)
+  (assemble
+   (label 'loop)
+   (stream-put t n)
+   (yield t n)
+   (jump 'loop)))
+
+(define (getter)
+  (assemble
+   (label 'loop)
+   ; TODO: This causes a reference cycle!  The resume-task references the stream
+   ; head (because h is given to save).  The stream's waiters references the
+   ; resume-task chunk.  Therefor a cycle exists:
+   ; task -> head -> stream -> waiters -> elements -> task.
+   (stream-get rFF h h) ; Save h across suspensions.
+   (jump 'loop)))
+
+(set-immediate one 1)
+
+(stream-create h t)
+
+(let ((x (prompt/nat "Stream/multi putters amount: ")))
+  (begin (display "  Getters amount will be ") (write (* 2 x)) (newline))
+  (set-immediate i x))
+
+(set-multiple-immediates (group p g))
+(putter)
+(getter)
+
+(label 'loop)
+(sub i i one)
+(jump-negative i 'done)
+(spawn p t i)
+(spawn g h rFF) ; Don't care about 2nd arg.
+(spawn g h rFF) ; Don't care about 2nd arg.
+(jump 'loop)
+
+(label 'done)
+; Nothing to return to, so done.
+(done)

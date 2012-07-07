@@ -33,3 +33,6 @@
   (label 'loop)
   (sub counter counter one)
   (jump-positive counter 'loop))
+
+; Commented-out to demonstrate out-of-bounds processor-exception.
+#;(done)

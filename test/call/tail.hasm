@@ -1,0 +1,16 @@
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+(import (vifne util assembler high-lang)
+        (vifne test call return-linkage)
+        (rnrs base))
+
+; Tail calling.  Does not accumulate return linkages and so does not consume
+; storage.  Should be able to run forever.
+(return-linkage-test
+ (lambda (seg) (goto seg))
+ "Tail-call")
+
+; Nothing to return to, so done.
+(done)

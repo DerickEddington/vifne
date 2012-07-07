@@ -1,0 +1,41 @@
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+(import (vifne util assembler high-lang)
+        (vifne test lang-util)
+        (rnrs base))
+
+(define s r0)
+(define arg0 r1)
+(define arg1 r2)
+(define i r3)
+(define one r4)
+
+(define (spawnee)
+  (assemble
+   (test arg0 1)
+   (test arg1 2)
+   ; Nothing to return to, so done.
+   (done)))
+
+(set-immediate one 1)
+
+(set-multiple-immediates (group s))
+(spawnee)
+
+(set-immediate arg0 1)
+(set-immediate arg1 2)
+
+(set-immediate i (prompt/nat "Spawn/basic spawn amount: "))
+
+(label 'loop)
+(sub i i one)
+(jump-negative i 'done)
+(spawn s arg0 arg1)
+(jump 'loop)
+
+(label 'done)
+
+; Nothing to return to, so done.
+(done)

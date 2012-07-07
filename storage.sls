@@ -32,8 +32,8 @@
     storage-set!
     startup-tasks-head
     startup-tasks-tail
-    #|deferred-tasks-head
-    deferred-tasks-tail|#)
+    ready-tasks-head
+    ready-tasks-tail)
   (import
     (rnrs base)
     (rnrs control)
@@ -55,7 +55,7 @@
   (define ref-word  (case word-size ((8) pointer-ref-u64)))
   (define set-word! (case word-size ((8) pointer-set-u64!)))
 
-  ; Type that represents a chunk field.
+  ; Type that represents a chunk field.  It must be externally representable.
   (define f cons)
   (define fv car)
   (define fp? cdr)
@@ -119,44 +119,45 @@
   (define free-list-field           0)
   (define startup-tasks-head-field  1)
   (define startup-tasks-tail-field  2)
-  (define deferred-tasks-head-field 3)
-  (define deferred-tasks-tail-field 4)
+  (define ready-tasks-head-field    3)
+  (define ready-tasks-tail-field    4)
 
   (define (free-list) (ref-word control-struct free-list-field))
   (define (free-list-set! id) (set-word! control-struct free-list-field id))
 
   (define (startup-tasks-head) (ref-word control-struct startup-tasks-head-field))
   (define (startup-tasks-tail) (ref-word control-struct startup-tasks-tail-field))
-  #|(define (deferred-tasks-head) (ref-word control-struct deferred-tasks-head-field))
-  (define (deferred-tasks-tail) (ref-word control-struct deferred-tasks-tail-field))|#
+  (define (ready-tasks-head) (ref-word control-struct ready-tasks-head-field))
+  (define (ready-tasks-tail) (ref-word control-struct ready-tasks-tail-field))
 
   (define (check-storage! init? alloc-stream!)
     (define (initialize!)
       ; Make the chunk following the control struct be the first free chunk.
       (free-list-set! control-struct-size)
-      ; Setup the startup-tasks stream (TODO?: and the deferred-tasks stream).
+      ; Setup the startup-tasks stream and the ready-tasks stream.
       (let ((s-h&t (alloc-stream!))
-            #;(d-h&t (alloc-stream!)))
-        (assert (and s-h&t #;d-h&t))
+            (r-h&t (alloc-stream!)))
+        (assert (and s-h&t r-h&t))
         (set-word! control-struct startup-tasks-head-field (car s-h&t))
         (set-word! control-struct startup-tasks-tail-field (cadr s-h&t))
-        #|(set-word! control-struct deferred-tasks-head-field (car d-h&t))
-        (set-word! control-struct deferred-tasks-tail-field (cadr d-h&t))|#)
+        (set-word! control-struct ready-tasks-head-field (car r-h&t))
+        (set-word! control-struct ready-tasks-tail-field (cadr r-h&t)))
       ; Setup the meta fields of the control-struct chunk, to look like a normal
       ; chunk.  This isn't necessary, but it makes the control-struct chunk look
       ; consistent with other chunks in storage-file print-outs, and it might be
       ; useful for the future if the control struct is ever accessed like a
       ; normal chunk.  Note that free-list-field being marked as a pointer does
       ; not contribute to the reference count of the chunk it points to, but
-      ; startup-tasks-head-field and startup-tasks-tail-field being marked does
+      ; startup-tasks-head-field, startup-tasks-tail-field,
+      ; ready-tasks-head-field, and ready-tasks-tail-field being marked does
       ; contribute to the count of the chunks they point to.
       (set-word! control-struct reference-count-field 1)
       (set-word! control-struct tags-field (tags guard-tag))
       (set-word! control-struct pointer-flags-field (bitset free-list-field
                                                             startup-tasks-head-field
                                                             startup-tasks-tail-field
-                                                            #|deferred-tasks-head-field
-                                                            deferred-tasks-tail-field|#)))
+                                                            ready-tasks-head-field
+                                                            ready-tasks-tail-field)))
     (define (die msg) (error 'check-storage! msg))
     (assert (< control-struct-size storage-size))
     (assert (integer? (/ storage-size chunk&meta-size)))

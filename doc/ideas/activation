@@ -1,0 +1,103 @@
+[The below is brainstorming.  The actual design differs.]
+
+There is a special register, named Activation, that points to an Activation
+chunk.  This register is protected such that it can't be read or modified except
+in the special safe ways by the call and return operations (this protection is
+needed to have capability security).
+
+There is a call operation that takes an instruction segment and a source
+group+selection that specifies what registers to save across the call.  This way
+nothing can be preserved if desired by having an empty selection.  The call
+operation allocates a chunk (which might fail with a storage-full processor
+exception), reserves field 0 for saving a pointer to the caller's Activation
+chunk, reserves fields 1 and 2 for the return instruction segment and index
+specified by the caller (TODO? Should this always be the instruction following
+the call? i.e. not specified by the caller), reserves field 3 for the given
+group+selection (32 bits altogether, 32 left unused), and the remaining fields
+are used to save what the group+selection specify.  The operation must not allow
+the group selection of saved values to interfere with the reserved fields, and
+such interference could either cause a processor-exception or the interfering
+parts of the selection ignored but the rest still used.  After preparing the
+callee's Activation chunk, control is given to the specified I.S..  It is the
+software's responsibility to coordinate some calling convention for what
+registers to use to pass arguments and what registers are caller- or
+callee-saved.
+
+There is a return operation that uses the Activation special register to return
+to the point, and restore the saved data, specified by the Activation chunk
+(pointed to by the special register).  The saved caller's Activation chunk
+pointer is set as the value of the Activation special register.  The saved
+group+selection is used to restore the values saved in the unreserved fields.
+It is the software's responsibility to coordinate some convention for what
+registers to use to return values (note that the saved group+selection
+restoration could conflict with the return-values registers, and it's the
+software's responsibility to avoid this).
+
+TODO: How to unify this with stream-get, so a resume procedure's Activation
+state can be restored?  Maybe Activation chunks are queued, instead of
+procedures - the A. chunk's return point is the resume procedure, and the other
+A. chunk fields are used for A. restoration.
+
+TODO: How to integrate this with spawning and returning to a master?  Maybe the
+unused 32 bits in field 3 of an A. chunk can be used as a flag that indicates
+whether the call is a spawn or not.  If a spawn, fields 1 and 2 are the stream
+tail and whatever tag (specified by the master) to use for returning the slave's
+value(s).  Executing the return operation with such an A. chunk puts the return
+value(s) along with the tag in the stream.  I don't think the other A. chunk
+fields are relevant for this.  Could the other fields be used for passing the
+arguments to the spawnee?  Must have some way of passing them.  The master will
+do stream-get with appropriate resume procedure.  To collect from multiple
+slaves, do successive stream-gets with resume procedure(s) that save the values
+accumulated from already-completed slaves in the save-across-call data of the
+A. chunk given as the resume to the next stream-get.
+
+TODO: Is it possible to unify the above direct and spawn calling conventions, so
+that the same instruction segment can be either directly- or spawned-called?
+Otherwise, there will have to be different I.S.s for each call type.  - I think
+so, if spawn operation takes an additional I.S. of a custom helper that is
+invoked before the target proc and this helper unpacks the spawn arguments into
+the registers per whatever calling convention and then invokeds the target; and
+if spawn arranges the Return chunk so that the return operation will invoke a
+custom helper that packs registers per whatever CC into a chunk and then
+stream-puts these return values along with the master-supplied-tag into the tail
+of the masters join-stream.
+
+Procedures invoked by a spawned procedure must be able to tail-return directly
+to the same point the spawned procedure returns to.
+
+
+
+
+[Older:]
+
+There is an Activation special register, that cannot be read or modified, that
+points to an Activation chunk with a specific type/structure that holds the info
+needed to call and return from a procedure: 1) a pointer to an instruction
+segment (if pointer valued) or an index in the caller's IS (if non-pointer
+valued), that is the return point; 2) a pointer to the caller's Activation
+chunk, so it can be restored when returning; 3) data saved by the caller TODO
+how specifically?
+
+There is an instruction/operation that calls a sub-procedure by allocating a new
+chunk to be the above data for the call and by linking to the caller's and by
+holding the return point supplied by the caller.
+
+Thus, the return point, the caller's activation state chunk, and the caller's
+saved data, are all protected from modification by the callee and are all
+guaranteed to be correct for procedure return.
+
+
+TODO: Will need to change special registers implementation and special register
+operations, to protect the Activation special register from possibly being
+modified.
+
+TODO: How to support tail-calls, i.e. the return-linkage chain does not grow.
+Maybe with an instruction/operation that transfers control to the start of an
+instruction segment without modifying any registers - thus whatever special
+activation register(s) is(are) preserved, and so a return will return to the
+same point of the caller, and no new space is used.
+
+TODO: What about stream-get resume procedures: where do they return to? How is
+that given to be put in an Activation chunk?
+
+TODO: What about top-level/primordial procedures that have nothing to return to?

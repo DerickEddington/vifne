@@ -11,10 +11,10 @@
     special-register-code?
     group-mask?
     rv rp? rf r-set!
-    II IS
+    II IS R
     srv srp? srf sr-set!
-    registers:cleanup
-    registers:set-storage-comm!)
+    clear-registers!
+    registers:initialize!)
   (import
     (rnrs base)
     (rnrs control)
@@ -47,6 +47,7 @@
   (define-special-registers special-register-set
     IS        ; Instruction Segment
     II        ; Instruction Index
+    R         ; Return information
     )
 
   (define set-register!
@@ -81,7 +82,7 @@
   (define (group-mask? x)
     (and (exact-non-negative-integer? x) (<= x #xFFFF)))
 
-  (define (registers:cleanup)
+  (define (clear-registers!)
     ; Clear the registers, which decrements all referenced chunks' reference
     ; counts.
     (define (clear s) (vector-for-each (lambda (r) (set-register! r (f 0 #F))) s))
@@ -91,7 +92,7 @@
 
   (define send*)
 
-  (define (registers:set-storage-comm! sender receiver)
+  (define (registers:initialize! sender)
     (set! send* sender))
 
   ;-----------------------------------------------------------------------------

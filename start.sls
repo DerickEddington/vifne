@@ -20,6 +20,7 @@
     (vifne posix redirect)
     (vifne posix signals)
     (vifne exit)
+    (vifne message-queue)
     (vifne main-pid)
     (vifne storage)
     (vifne storage stream)
@@ -89,10 +90,10 @@
     (define (fork-storage-controller)
       (fork-child start-storage-controller num-procs))
 
-    (define (fork-processors sth stt)
+    (define (fork-processors sth rth rtt)
       (let loop ((n 0) (pids '()) (cleanups '()))
         (if (< n num-procs)
-          (let-values (((p c) (fork-child start-processor n sth stt)))
+          (let-values (((p c) (fork-child start-processor n sth rth rtt)))
             (loop (+ 1 n) (cons p pids) (cons c cleanups)))
           (values (reverse pids) (reverse cleanups)))))
 
@@ -110,6 +111,12 @@
       ; clean-up.  Also, call the processes' after-death clean-ups, after they
       ; are terminated.
       (for-each term processor-pids)
+      ; Wake up any processor processes blocked in activate-ready-task, so they
+      ; can clean-up and terminate.  Only need to send one message, because a
+      ; receiver (if there is one) will send another message to wake up possible
+      ; other blocked processes.  This design avoids filling the message queue,
+      ; which would block this process and deadlock the emulator.
+      (ignore-exception (send (open-message-queue "waiting-processors") 'stop))
       (for-each wait processor-pids)
       (for-each (lambda (p) (p)) processor-cleanups)
       (when storage-controller-pid
@@ -132,7 +139,8 @@
 
     ; Fork the processor processes.
     (let-values (((pids cus)
-                  (fork-processors (startup-tasks-head) (startup-tasks-tail))))
+                  (fork-processors (startup-tasks-head)
+                                   (ready-tasks-head) (ready-tasks-tail))))
       (set! processor-pids pids)
       (set! processor-cleanups cus))
 
