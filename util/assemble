@@ -28,7 +28,7 @@
         (loop (cons x a))))))
 
 (define (print n)
-  (display "Chunk ID of stored graph:\n")
+  (display "Chunk ID of assembled graph:\n")
   (display "#x") (display (number->string n 16)) (newline))
 
 
