@@ -38,4 +38,4 @@ cd "$D"  &&
 "$V/util/assemble"  -i true  -a true  "$TEST"  &&
 
 # Run the emulator with the storage file containing the test program.
-"$V/vifne" "${@:2}"
+$SCHEME_EXECUTOR "$V/vifne" "${@:2}"

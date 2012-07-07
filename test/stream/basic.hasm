@@ -14,24 +14,39 @@
 (define h r0)
 (define t r1)
 (define i r2)
-(define x r3)
-(define one r4)
+(define a r3)
+(define j r4)
+(define x r5)
+(define one r6)
 
 (set-immediate one 1)
 
 (stream-create h t)
 
 (set-immediate i (prompt/nat "Stream/basic loop count: "))
-(jump-positive i 'loop)
-(jump 'done)
+(set-immediate a (prompt/nat "Stream/basic at-once count: "))
 
-(label 'loop)
+(label 'loop1)
+(sub i i one)
+(jump-negative i 'done)
+(copy j a)
+
+(label 'loop2)
+(sub j j one)
+(jump-negative j 'go3)
 (stream-put t i)
+(jump 'loop2)
+
+(label 'go3)
+(copy j a)
+
+(label 'loop3)
+(sub j j one)
+(jump-negative j 'loop1)
 (stream-get x h rFF) ; (Saved register rFF doesn't matter for this test.)
 (sub x x i)
 (test x 0)
-(sub i i one)
-(jump-positive i 'loop)
+(jump 'loop3)
 
 (label 'done)
 
