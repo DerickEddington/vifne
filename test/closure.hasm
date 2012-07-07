@@ -1,0 +1,15 @@
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+TODO: Make an I.S. that takes an I.S. and an index and a field-value, and copies
+the I.S. with the field-value substituted at the index.  This enables taking a
+closure template and filling in the needed fields with whatever closed-over
+values.  Note that this is nearly the same as a general array-tree update
+procedure, the only difference being that I.S. are a handle on an array-tree
+rather than an array-tree directly.  Perhaps, instead, the test should be of
+array-tree updating first, and then a secondary test of using it for closure
+instantiation.
+
+; Nothing to return to, so done.
+(done)

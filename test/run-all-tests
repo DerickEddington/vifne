@@ -1,0 +1,22 @@
+#! /bin/bash
+
+# Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+# LICENSE from the original collection this file is distributed with.
+
+#TODO: Shell script that uses run-test to run all the tests except intentionally
+#excluded ones like call/chain.hasm.
+
+# arguments 1+ = tests to ignore
+
+shopt -s extglob
+shopt -s globstar
+
+
+EXCLUDE="low-lang.lasm high-lang.hasm"
+
+IGNORE=" ${@:1}"
+
+echo $IGNORE
+
+
+# **/!($IGNORE).vasm  ???

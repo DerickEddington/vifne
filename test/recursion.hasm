@@ -1,0 +1,24 @@
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+TODO: Self recursion without reference cycle, using Y combinator.  Mutual
+recursion without reference cycle, using YM combinator.  This requires the
+ability to make closures; the array/closure-update code from test/closure.hasm
+should be reused, which will require some way to link it to this assembly.
+
+
+
+
+   (define (even?)
+     (assemble
+      (jump-zero? arg0 'done)
+      (set-immediate rFF 1)
+      (sub arg0 arg0 rFF)
+      (goto arg1)   tail call odd?
+      (label 'done)
+      (set-immediate arg0 1)   true
+      (return)))
+
+; Nothing to return to, so done.
+(done)

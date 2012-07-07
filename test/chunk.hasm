@@ -1,0 +1,12 @@
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+TODO: Tests of chunks being reallocated with fields having old values
+(un-pointer-ified).  Programs cannot rely on chunk fields being zeroed.
+
+- Wait, chunk-create operation does zero undefined fields.  Test this instead.
+  Which means the above is invalid and programs can rely on fields being zeroed.
+
+; Nothing to return to, so done.
+(done)

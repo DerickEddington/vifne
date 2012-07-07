@@ -1,0 +1,11 @@
+#!r6rs
+; Copyright 2012 Derick Eddington.  My MIT-style license is in the file named
+; LICENSE from the original collection this file is distributed with.
+
+TODO: Summ all integers in a range, by spawning many threads to do half a range,
+recursively.  See similar test from Cabna.  Also, maybe, could make this test
+spawn only as many threads as processors, to demonstrate parallel speed-up
+vs. single-threaded.
+
+; Nothing to return to, so done.
+(done)
