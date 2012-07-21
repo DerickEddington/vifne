@@ -1,3 +1,41 @@
+Should probably put (assert #F) at points where child processes should never
+continue to.
+
+Investigate changing chunk allocation to zero all fields of the chunk, because
+chunk-create zeros them, so want everything to be consistent with this (i.e. not
+have lower-level things having old dead data in chunks that weren't allocated
+with chunk-create).
+
+Investigate redesigning stream-get to take an arg that says whether it should
+allocate a new chunk to put in the waiters.  This way the stream-get
+instruction/operation doesn't have to pre-allocate even if not needed.  The
+processor doing the inst/op can safely mutate the chunk, to make it a task
+chunk, because no other processors can possibly have access to it (like
+chunk-create inst/op).  Only do this if the failure cases are safe, i.e. nothing
+is left inconsistent or lost, included for corner cases like emulator-stop in
+progress.
+
+Investigate redesigning default initial refcounts to be 0 not 1.  I suspect this
+will simplify the emulator be removing all the spots where the allocation-given
+refcount of 1 has to be taken into account and the refcount not incremented
+again.  My reason for having default initial of 1 was so that chunks are always
+discernable as allocated, which is important for when a magic pointer refers to
+a chunk, and could be important for future things that analyze the state of a
+storage file.  If do this, must be careful that a decrement does not happen
+before the refcount is set to at least 1.  Also, if do this, probably should add
+new metadata flag that indicates whether a chunk is allocated, for above reasons
+for wanting to be able to discern this.
+
+Rename set-multiple-immediates to something better.  Maybe
+set-immediate-following.
+
+Investigate improving debug logging of processor operations.  Would be nice to
+see values of registers (as fields) - requires knowing what operands are
+register code and what ones aren't.  Nice to have log of things like calls to
+activate, activate-ready-task, etc.
+
+Make tests that do the corner cases, so these tests can be used for regression
+testing in the future.
 
 Investigate if it's possible for a chunk to be freed by a processor while
 another processor still intends to use it.  E.g. processor A decides to use a

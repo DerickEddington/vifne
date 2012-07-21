@@ -153,6 +153,8 @@
           (cond ((instruction? form)
                  `(,(car form) . ,(map L (cdr form))))
                 ((chunk? form)
+                 ; TODO: Doesn't this break supporting identical references,
+                 ; because the eq? identity of chunk forms is lost.
                  `(chunk . ,(map (lambda (f) (if (or (chunk? f) (instruction? f))
                                                (R f)
                                                (L f)))

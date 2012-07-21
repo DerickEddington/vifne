@@ -4,18 +4,45 @@ same stream: chunk ->* handle -> stream -> elements -> chunk
 
 Solution idea:
 
+If allocation from storage is needed but it's full, search for an unreachable
+cycle and free it, to make some storage available.  Because cycles can only
+happen through streams, the search can be more effecient by only checking
+streams.  This could be even more efficient if the storage controller maintains
+a set of all streams (so it doesn't have to scan the entire storage looking for
+streams); and because there shouldn't be very many streams, the storage used for
+this list seems reasonable.
+
+
+
+
+------
+
+Below idea can't work because:
+
+If stream A and stream B both have as an element the same chunk that reaches
+both streams, then both streams will adjust their refocunt free limit up.  But
+if all non-cycle refs to stream A are lost, then according to this idea, stream
+A will be freed, but this is wrong because there are still non-cycle refs to
+stream B which refs stream A and so stream A should not be freed!
+
+------
+
+Solution idea:
+
 A chunk has metadata that says what streams it references, directly or
-transitively.  When a new chunk is created, its such metadata is the union of
-any chunks it references.  TODO: about how this could be implemented as pointer
-to stream-handle-tagged chunk or pointer to list of SHT pointers or null.
+transitively, i.e. what streams are reachable from it, i.e. what streams it
+reaches.  When a new chunk is created, its such metadata is the union of that
+metadata of any chunks it references.  This metadata might be implemented as a
+list that could actually be a tree (similar to string ropes) to enable more
+efficient list appending.
 
 For this to work, I think that in addition to tracking what streams are
 reachable from a chunk, must also track what chunk directly references such
 reachable streams.  I.e. a tracked datum is a pair of a pointer to a stream and
 a pointer to the chunk that directly references the corresponding stream.  This
-way, a stream can know how many unique refs to itself exist in any cycle(s) (by
-checking, for each indicated referenced-stream, how many distinct
-referencing-chunks are paired with the indication), so it can be known by what
+way, a stream can know how many distinct refs to itself exist in any cycle(s)
+(by checking, for each indicated referenced-stream, how many distinct
+referencing-chunks are paired with the stream), so it can be known by what
 amount to adjust the reference count free limit.  For example, if a stream has
 two elements that both reach the same chunk that references the stream, then
 there are two cycles but only one reference in the cycles that contributes to
@@ -59,19 +86,20 @@ the reference to the stream in the taken element is now counted as a non-cycle
 reference, i.e. this reference now contributes to keeping the stream alive,
 which is desired.
 
-TODO: weak idea isn't quite right.  Don't want weak refs, but want streams to
-know how many cycle refs to themselves there are, so that decr-refcount!
-operation can know to free a stream when its refcount is decremented to the
-number of cycle refs (which means there are no more refs outside the cycle(s)).
+I'm not sure if the design should be changed such that creating a chunk is all
+done by the storage controller (in contrast to the current design where the SC
+only allocates a chunk ID and a processor process sets the mmap'ed memory
+fields.  Because of the additional operations of this idea for dealing with
+cycles, it might make sense to have the storage controller do it all.  But if
+there are no concurrency problems with having processor processes do it then
+maybe they should for efficiency.  But for a real machine it would have to all
+be done by the storage controller, so it seems bad to add to the processors more
+unrealistic logic that doesn't correspond to how a real machine would be.  So I
+think the emulator should also be changed such that the SC does everything for
+chunk creation, which means the chunk-create message to the SC will have to
+include the field values for a new chunk.
 
-When a chunk ref is put in a stream, it is checked if the chunk's metadata says
-it references the stream.  If so, the stream's ref to the chunk is weak,
-i.e. does not increment the chunk's ref count, to prevent ref count cycle.
-
-If there will be no other references to such a chunk put in a stream, i.e. the
-weak ref the stream has to the chunk will be the only ref to it, the chunk must
-be prevented from being freed when the last non-weak ref is lost, i.e. when
-decr-refcount! is done.
+------
 
 Is the challenge that, for a ref cycle between stream and an element of the
 stream, and when the stream has the only ref to the element, if the stream
@@ -81,7 +109,10 @@ be freed.  ?
 
 The primary goal is that, if a cycle exists between a stream and one or more of
 its elements, and all references to the stream, other than those in cycles, are
-lost then the stream should be freed.
+lost then the stream should be freed and any chunks that were only ref'd by the
+stream should also be freed.
+
+------
 
 TODO: think about how this idea compounds with itself if a graph references
 multiple streams and the graph is simultaneously put in multiple of the streams.
@@ -154,8 +185,24 @@ resumption could set save register to refer to handle.  But what about scenario
 where it's desired to save both handles and other data? - there's only two save
 slots.
 
--------
+------
 
 I don't understand J.Dennis' comment about how cycles are prevented via stream
 chunk tagging.  He references the mechanism being similar to that of incremental
 arrays, so I should learn about that.
+
+------
+
+TODO: weak idea isn't quite right.  Don't want weak refs, but want streams to
+know how many cycle refs to themselves there are, so that decr-refcount!
+operation can know to free a stream when its refcount is decremented to the
+number of cycle refs (which means there are no more refs outside the cycle(s)).
+
+When a chunk ref is put in a stream, it is checked if the chunk's metadata says
+it references the stream.  If so, the stream's ref to the chunk is weak,
+i.e. does not increment the chunk's ref count, to prevent ref count cycle.
+
+If there will be no other references to such a chunk put in a stream, i.e. the
+weak ref the stream has to the chunk will be the only ref to it, the chunk must
+be prevented from being freed when the last non-weak ref is lost, i.e. when
+decr-refcount! is done.
